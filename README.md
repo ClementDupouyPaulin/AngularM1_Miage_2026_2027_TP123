@@ -43,6 +43,37 @@ npm start
 Ouvrir `http://localhost:4200`. Le compte de démonstration est
 `demo@example.com` / `Demo1234!`.
 
+## Lancer les tests et le build
+
+```bash
+cd backend && npm test                 # tests Node, sans MongoDB ni réseau
+cd frontend-starter && npm test        # tests Vitest + jsdom, sans backend
+cd frontend-starter && npm run build   # build de production
+```
+
+Les tests ne contactent ni MongoDB Atlas ni le réseau : les réponses HTTP, les
+modèles Mongoose et le service iTunes y sont simulés.
+
+## Fonctionnalités facultatives
+
+En plus des missions obligatoires, le dépôt contient les options des sujets :
+pagination Mongoose (`aggregate-paginate-v2`), filtre par titre, `MatPaginator`
+et images de couverture (envoi d'une image, lecture des tags ID3 à l'upload,
+recherche Web de pochette). Elles ajoutent des routes à
+[API_CONTRACT.md](API_CONTRACT.md) sans changer celles qui existaient, et deux
+dépendances au backend (`mongoose-aggregate-paginate-v2`, `music-metadata`) :
+relancer `npm install` dans `backend/` après une mise à jour. La recherche Web de
+pochette appelle l'API publique iTunes et demande donc un accès Internet ; elle
+n'est lancée que sur action explicite de l'utilisateur.
+
+## Documentation du projet
+
+L'index complet est dans [frontend-starter/docs/README.md](frontend-starter/docs/README.md)
+(cartographie, flux de connexion, upload et lecture audio, suppression,
+progression, tests, restitution orale, bonus). Le statut de chaque
+fonctionnalité facultative est dans
+[frontend-starter/docs/bonus/matrice-facultatives.md](frontend-starter/docs/bonus/matrice-facultatives.md).
+
 ## Documents de travail
 
 - [SUJET_ETUDIANT_TP1.md](SUJET_ETUDIANT_TP1.md), [SUJET_ETUDIANT_TP2.md](SUJET_ETUDIANT_TP2.md) et [SUJET_ETUDIANT_TP3.md](SUJET_ETUDIANT_TP3.md) : missions des trois séances ;
