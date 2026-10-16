@@ -1,0 +1,64 @@
+/*
+ * Encapsulation désactivée : le panneau est rendu dans l'overlay, hors de
+ * l'hôte. Toutes les règles restent préfixées par la classe de panneau.
+ */
+.cover-search-dialog {
+  --mat-dialog-container-color: var(--surface);
+  --mat-dialog-subhead-color: var(--text);
+  --mat-dialog-supporting-text-color: var(--text);
+  --mat-dialog-container-shape: var(--radius-md);
+}
+
+.cover-search-dialog p { margin: 0 0 var(--space-3); overflow-wrap: anywhere; }
+
+.cover-search-dialog .cover-search-status { min-height: 1.5rem; color: var(--text-muted); font-size: 0.875rem; }
+
+.cover-search-dialog .candidates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.cover-search-dialog .candidate {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-2);
+  text-align: left;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.cover-search-dialog .candidate:hover:not(:disabled) { color: var(--text); background: var(--surface-2); border-color: var(--brand); }
+
+.cover-search-dialog .candidate.selected {
+  background: var(--surface-2);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand);
+}
+
+.cover-search-dialog .candidate img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.cover-search-dialog .candidate-title { font-weight: 600; overflow-wrap: anywhere; }
+.cover-search-dialog .candidate-meta { color: var(--text-muted); font-size: 0.8125rem; overflow-wrap: anywhere; }
+
+.cover-search-dialog .candidate-skeleton { aspect-ratio: 1; }
+
+.cover-search-dialog .attribution { color: var(--text-muted); font-size: 0.8125rem; }
+
+.cover-search-dialog .mat-mdc-dialog-actions { gap: var(--space-2); }
+.cover-search-dialog button { min-height: 2.75rem; }

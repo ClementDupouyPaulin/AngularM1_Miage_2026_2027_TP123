@@ -1,1 +1,404 @@
 :host { display: block; }
+
+.page { display: grid; gap: var(--space-4); }
+
+.hero { margin-bottom: 0; }
+.hero h1 { margin: var(--space-2) 0; }
+.hero p { margin: 0; }
+
+.card h2 { margin: 0 0 var(--space-3); font-size: 1.25rem; }
+
+.status {
+  min-height: 1.5rem;
+  margin: var(--space-3) 0 0;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.alert { display: block; margin: var(--space-3) 0 0; }
+
+/* --- Import ------------------------------------------------------------- */
+
+.upload-layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (min-width: 720px) {
+  .upload-layout { grid-template-columns: 3fr 2fr; align-items: start; }
+}
+
+.dropzone {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.dropzone.dragging,
+.dropzone:hover:not(.disabled) { border-color: var(--brand); }
+.dropzone.dragging { background: var(--success-bg); }
+.dropzone.has-file { border-style: solid; }
+.dropzone.disabled { opacity: 0.6; }
+
+/* Le champ fichier est masqué visuellement mais reste focalisable : le focus
+   est donc reporté sur la zone entière. */
+.dropzone:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.dropzone-label {
+  justify-items: center;
+  margin: 0;
+  padding: var(--space-3);
+  min-height: 2.75rem;
+  text-align: center;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.dropzone.disabled .dropzone-label { cursor: not-allowed; }
+
+.dropzone-icon { width: 2.25rem; height: 2.25rem; color: var(--brand); }
+
+.dropzone-title { font-weight: 600; }
+
+.dropzone-link { color: var(--brand); text-decoration: underline; }
+
+.file-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.file-name { overflow-wrap: anywhere; }
+
+.upload-fields label { margin-top: 0; }
+
+.upload-fields input { min-height: 2.75rem; }
+
+.send { width: 100%; min-height: 2.75rem; margin-top: var(--space-3); }
+
+.progress-zone { margin-top: var(--space-3); }
+
+.upload-progress {
+  width: 100%;
+  height: 0.6rem;
+  accent-color: var(--brand);
+}
+
+/* --- Bibliothèque ------------------------------------------------------- */
+
+.library-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.library-header h2 { margin: 0; }
+
+.refresh, .clear { min-height: 2.75rem; }
+
+.search { margin-top: var(--space-4); }
+
+.search-label { margin: 0 0 var(--space-2); }
+
+.search-field {
+  position: relative;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.search-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding-left: 2.5rem;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3);
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search .hint { margin-top: var(--space-2); }
+
+/* Grille de cartes : 1, 2 puis 3 colonnes. */
+.tracks {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  transition: opacity 0.15s ease;
+}
+
+@media (min-width: 600px) {
+  .tracks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 900px) {
+  .tracks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+.tracks.stale { opacity: 0.6; }
+
+.track-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'cover body'
+    'actions actions'
+    'cover-actions cover-actions';
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.track-card:hover { box-shadow: var(--shadow-sm); }
+
+.track-card.playing {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px var(--brand), var(--shadow-sm);
+  background: var(--surface-2);
+}
+
+.cover-slot {
+  grid-area: cover;
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  overflow: hidden;
+  color: var(--brand);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.track-card.playing .cover-slot { color: var(--on-brand); background: var(--brand); }
+
+.track-body { grid-area: body; min-width: 0; }
+
+.track-title {
+  margin: 0 0 var(--space-1);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.track-artist {
+  margin: 0 0 var(--space-1);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.now-playing,
+.player-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  color: var(--brand-strong);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.track-actions {
+  grid-area: actions;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.track-actions button {
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.delete {
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid currentColor;
+}
+
+.delete:hover:not(:disabled) { color: var(--danger); background: var(--danger-bg); }
+
+/* Actions de pochette : secondaires, sous les actions principales. */
+.cover-actions {
+  grid-area: cover-actions;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--surface-2);
+}
+
+.cover-actions button {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.8125rem;
+}
+
+.source-badge { font-weight: 600; }
+
+/* Pochette optionnelle du formulaire d'upload */
+.cover-field { margin-top: var(--space-3); }
+.cover-field label { margin: 0 0 var(--space-2); }
+.cover-field input[type='file'] { min-height: 2.75rem; }
+.optional { font-weight: 400; color: var(--text-muted); }
+.cover-field .field-error { margin-top: var(--space-2); }
+
+.cover-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+
+.cover-preview img {
+  width: 4rem;
+  height: 4rem;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.cover-preview-info {
+  display: flex;
+  flex: 1 1 8rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  min-width: 0;
+}
+
+.clear-cover { min-height: 2.75rem; }
+
+/* Égaliseur animé : purement décoratif, figé si « réduire les animations ». */
+.equalizer {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 0.9rem;
+}
+
+.equalizer i {
+  width: 3px;
+  height: 100%;
+  background: currentColor;
+  border-radius: 1px;
+  animation: equalize 0.9s ease-in-out infinite alternate;
+}
+
+.equalizer i:nth-child(2) { animation-delay: -0.3s; }
+.equalizer i:nth-child(3) { animation-delay: -0.6s; }
+
+@keyframes equalize {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1); }
+}
+
+.equalizer i { transform-origin: bottom; }
+
+/* Squelettes du premier chargement */
+.skeleton-card { border-style: dashed; }
+.skeleton-line { height: 0.9rem; margin: var(--space-2) 0; width: 60%; }
+.skeleton-line.wide { width: 85%; }
+
+/* États vides */
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.empty p { margin: 0; }
+.empty-title { font-weight: 600; overflow-wrap: anywhere; }
+.empty-icon { width: 2.5rem; height: 2.5rem; color: var(--brand); }
+.empty button { min-height: 2.75rem; margin-top: var(--space-2); }
+
+/* Paginator Material aligné sur les tokens de l'application (clair/sombre). */
+.paginator {
+  margin-top: var(--space-4);
+  --mat-paginator-container-background-color: transparent;
+  --mat-paginator-container-text-color: var(--text);
+  --mat-paginator-enabled-icon-color: var(--text);
+  --mat-paginator-disabled-icon-color: var(--text-muted);
+  --mat-icon-button-state-layer-size: 44px;
+  --mat-select-enabled-trigger-text-color: var(--text);
+  --mat-select-enabled-arrow-color: var(--text);
+  --mat-form-field-outlined-outline-color: var(--border);
+  --mat-form-field-outlined-hover-outline-color: var(--brand);
+}
+
+/* Les boutons Material du paginator héritent du style global `button:hover` :
+   on neutralise ce fond plein au profit d'un léger état de survol. */
+:host ::ng-deep .paginator .mat-mdc-icon-button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+:host ::ng-deep .paginator .mat-mdc-icon-button[aria-disabled='true'] {
+  background: transparent;
+  cursor: not-allowed;
+}
+
+/* Lecteur « en cours de lecture » collé en bas de l'écran pendant le défilement. */
+.player {
+  position: sticky;
+  bottom: var(--space-2);
+  z-index: 1;
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 2px solid var(--brand);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.player-title { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  .equalizer i { animation: none; transform: scaleY(0.7); }
+  .tracks, .track-card, .dropzone { transition: none; }
+}

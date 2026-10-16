@@ -1,0 +1,12 @@
+@if (url()) {
+  <img class="cover-image" [src]="url()" [alt]="'Pochette de ' + track().title" (error)="onImageError()" />
+} @else {
+  <span class="cover-placeholder" [class.skeleton]="loading()" [attr.aria-busy]="loading()">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        d="M9 18.5A2.5 2.5 0 1 1 7 16V5l12-2v12.5a2.5 2.5 0 1 1-2-2.45V7.2L9 8.5v10Z"
+        fill="currentColor"
+      />
+    </svg>
+  </span>
+}

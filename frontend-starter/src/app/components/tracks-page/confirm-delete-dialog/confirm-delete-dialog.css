@@ -1,0 +1,21 @@
+/*
+ * Encapsulation désactivée : le panneau du dialogue est rendu dans l'overlay,
+ * hors de l'hôte du composant. Toutes les règles restent préfixées par la
+ * classe de panneau pour ne rien imposer au reste de l'application.
+ */
+.track-confirm-dialog {
+  --mat-dialog-container-color: var(--surface);
+  --mat-dialog-subhead-color: var(--text);
+  --mat-dialog-supporting-text-color: var(--text);
+  --mat-dialog-container-shape: var(--radius-md);
+}
+
+.track-confirm-dialog p { margin: 0; overflow-wrap: anywhere; }
+
+.track-confirm-dialog .mat-mdc-dialog-actions { gap: var(--space-2); }
+
+.track-confirm-dialog button { min-height: 2.75rem; min-width: 2.75rem; }
+
+/* `--surface` est blanc en clair et très sombre en sombre : contraste AA
+   garanti sur `--danger` dans les deux thèmes (le blanc fixe ne l'est pas). */
+.track-confirm-dialog .confirm { color: var(--surface); background: var(--danger); }

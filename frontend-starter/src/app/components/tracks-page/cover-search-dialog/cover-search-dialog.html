@@ -1,0 +1,64 @@
+<h2 mat-dialog-title>Chercher une pochette sur le Web</h2>
+
+<mat-dialog-content id="cover-search-description">
+  <p class="cover-search-intro">
+    Pochettes proposées pour « <strong>{{ result()?.query ?? data.title }}</strong> ».
+    Sélectionnez une image, puis confirmez.
+  </p>
+
+  <p class="cover-search-status" role="status" aria-live="polite">{{ announcement() }}</p>
+
+  @if (loading()) {
+    <ul class="candidates" aria-hidden="true">
+      @for (index of [0, 1, 2]; track index) {
+        <li><div class="candidate-skeleton skeleton"></div></li>
+      }
+    </ul>
+  } @else if (error()) {
+    <div class="alert alert-error cover-search-error" role="alert">
+      <p>{{ error() }}</p>
+      <button type="button" class="btn-secondary retry" (click)="search()">Réessayer</button>
+    </div>
+  } @else if (result(); as found) {
+    @if (found.results.length === 0) {
+      <p class="cover-search-empty">
+        Aucune pochette trouvée pour « {{ found.query }} ». Vous pouvez importer une image depuis
+        votre appareil.
+      </p>
+    } @else {
+      <ul class="candidates" aria-label="Pochettes proposées">
+        @for (candidate of found.results; track candidate.id) {
+          <li>
+            <button
+              type="button"
+              class="candidate"
+              [class.selected]="selected() === candidate"
+              [attr.aria-pressed]="selected() === candidate"
+              (click)="select(candidate)"
+            >
+              <img
+                [src]="candidate.imageUrl"
+                alt=""
+                width="100"
+                height="100"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              />
+              <span class="candidate-title">{{ candidate.title }}</span>
+              <span class="candidate-meta">{{ candidate.artist }}</span>
+              <span class="candidate-meta">{{ candidate.album }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+    <p class="attribution">{{ found.attribution }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" class="btn-secondary" [mat-dialog-close]="undefined">Annuler</button>
+  <button type="button" class="use" [disabled]="!selected()" (click)="confirm()">
+    Utiliser cette pochette
+  </button>
+</mat-dialog-actions>

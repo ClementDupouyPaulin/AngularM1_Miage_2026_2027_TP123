@@ -5,4 +5,8 @@ export interface Page<T> {
   limit: number;
   total: number;
   pages: number;
+  hasPrevPage: boolean;
+  hasNextPage: boolean;
+  prevPage: number | null;
+  nextPage: number | null;
 }

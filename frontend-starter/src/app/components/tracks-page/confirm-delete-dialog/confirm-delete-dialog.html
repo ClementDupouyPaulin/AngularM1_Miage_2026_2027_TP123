@@ -1,0 +1,43 @@
+@if (data.target === 'cover') {
+  <h2 mat-dialog-title>Retirer la pochette ?</h2>
+
+  <mat-dialog-content id="confirm-delete-description">
+    <p>
+      La pochette de « <strong>{{ data.title }}</strong> » sera supprimée. Le morceau reste
+      dans votre bibliothèque.
+    </p>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button type="button" class="btn-secondary" [mat-dialog-close]="false">Annuler</button>
+    <button
+      type="button"
+      class="btn-danger confirm"
+      [mat-dialog-close]="true"
+      [aria-label]="'Retirer la pochette de ' + data.title"
+    >
+      Retirer
+    </button>
+  </mat-dialog-actions>
+} @else {
+  <h2 mat-dialog-title>Supprimer cette piste ?</h2>
+
+  <mat-dialog-content id="confirm-delete-description">
+    <p>
+      « <strong>{{ data.title }}</strong> » sera définitivement retiré de votre bibliothèque.
+      Cette action est irréversible.
+    </p>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button type="button" class="btn-secondary" [mat-dialog-close]="false">Annuler</button>
+    <button
+      type="button"
+      class="btn-danger confirm"
+      [mat-dialog-close]="true"
+      [aria-label]="'Supprimer définitivement ' + data.title"
+    >
+      Supprimer
+    </button>
+  </mat-dialog-actions>
+}

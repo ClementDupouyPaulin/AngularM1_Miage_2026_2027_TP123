@@ -1,45 +1,418 @@
-<section>
+<section class="page">
   <div class="hero">
-    <p class="eyebrow">MA BIBLIOTHÈQUE</p>
+    <p class="eyebrow">Ma bibliothèque</p>
     <h1>Backing tracks</h1>
     <p>Importez, retrouvez et écoutez vos morceaux de travail.</p>
   </div>
 
-  <div class="grid">
-    <article class="card">
-      <h2>Importer</h2>
-      <label>Titre<input [formControl]="title" /></label>
-      <label>Fichier audio<input type="file" accept="audio/*" (change)="choose($event)" /></label>
-      <button type="button" (click)="upload()" [disabled]="!file">Envoyer</button>
-    </article>
+  <section class="card upload-card" aria-labelledby="upload-heading">
+    <h2 id="upload-heading">Importer un morceau</h2>
 
-    <article class="card">
-      <div class="row">
-        <h2>Mes pistes</h2>
-        <button type="button" (click)="load()">Actualiser</button>
+    <div class="upload-layout">
+      <div
+        class="dropzone"
+        [class.dragging]="dragging()"
+        [class.has-file]="file() !== undefined"
+        [class.disabled]="uploading()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave()"
+        (drop)="onDrop($event)"
+      >
+        <input
+          id="track-file"
+          #fileInput
+          class="visually-hidden"
+          type="file"
+          [accept]="acceptAttribute"
+          aria-describedby="file-hint"
+          [disabled]="uploading()"
+          (change)="choose($event)"
+        />
+        <label for="track-file" class="dropzone-label">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M12 3 7 8h3.5v6h3V8H17l-5-5Zm-7 14v3h14v-3h-2v1H7v-1H5Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="dropzone-title">
+            Glissez un fichier audio ici ou <span class="dropzone-link">parcourez vos fichiers</span>
+          </span>
+          <span class="hint" id="file-hint">
+            Formats acceptés : MP3, WAV, OGG, M4A — {{ maxFileSizeLabel }} maximum.
+          </span>
+        </label>
+
+        @if (file(); as selected) {
+          <p class="file-chip">
+            <span class="visually-hidden">Fichier sélectionné :</span>
+            <span class="file-name">{{ selected.name }}</span>
+            <span class="badge">{{ formatSize(selected.size) }}</span>
+          </p>
+        }
       </div>
-      @if (loading()) {
-        <p>Chargement…</p>
-      }
-      @for (track of tracks(); track track.id) {
-        <div class="track">
-          <div>
-            <b>{{ track.title }}</b>
-            <small>{{ track.originalName }} · {{ track.size }} Ko</small>
-          </div>
-          <button type="button" (click)="play(track)" [attr.aria-label]="'Lire ' + track.title">▶</button>
+
+      <div class="upload-fields">
+        <label for="track-title">
+          Titre
+          <input
+            id="track-title"
+            [formControl]="title"
+            autocomplete="off"
+            aria-describedby="title-hint"
+          />
+        </label>
+        <p class="hint" id="title-hint">Laissé vide, le nom du fichier est utilisé.</p>
+
+        <div class="cover-field">
+          <label for="track-cover">
+            <span>Pochette <span class="optional">(facultatif)</span></span>
+            <input
+              id="track-cover"
+              #coverInput
+              type="file"
+              [accept]="coverAcceptAttribute"
+              [attr.aria-describedby]="coverError() ? 'cover-hint cover-error' : 'cover-hint'"
+              [attr.aria-invalid]="coverError() ? 'true' : null"
+              [disabled]="uploading()"
+              (change)="chooseCover($event)"
+            />
+          </label>
+          <p class="hint" id="cover-hint">
+            JPEG, PNG ou WebP — 2 Mo maximum. Sans image, celle intégrée au fichier audio (tags ID3)
+            est utilisée si elle existe.
+          </p>
+          @if (coverError()) {
+            <p class="field-error" id="cover-error" role="alert">{{ coverError() }}</p>
+          }
+          @if (coverFile(); as cover) {
+            <div class="cover-preview">
+              <img [src]="coverPreviewUrl()" [alt]="'Aperçu de la pochette ' + cover.name" width="64" height="64" />
+              <p class="cover-preview-info">
+                <span class="file-name">{{ cover.name }}</span>
+                <span class="badge">{{ formatSize(cover.size) }}</span>
+              </p>
+              <button
+                type="button"
+                class="btn-secondary clear-cover"
+                (click)="clearCover()"
+                [disabled]="uploading()"
+                aria-label="Retirer l’image de pochette choisie"
+              >
+                Retirer l’image
+              </button>
+            </div>
+          }
         </div>
-      } @empty {
-        <p>Aucune piste.</p>
-      }
-      <div class="pager">
-        <button type="button" (click)="go(page() - 1)" [disabled]="page() === 1">Préc.</button>
-        <span>Page {{ page() }} / {{ pages() }}</span>
-        <button type="button" (click)="go(page() + 1)" [disabled]="page() === pages()">Suiv.</button>
+
+        <button
+          type="button"
+          class="send"
+          (click)="upload()"
+          [disabled]="!canUpload()"
+          [attr.aria-busy]="uploading()"
+        >
+          {{ uploading() ? 'Envoi en cours…' : 'Envoyer' }}
+        </button>
+
+        @if (uploading()) {
+          <div class="progress-zone">
+            @if (uploadProgress() !== null) {
+              <progress
+                class="upload-progress"
+                max="100"
+                [value]="uploadProgress()"
+                [attr.aria-label]="'Progression de l’envoi'"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                [attr.aria-valuenow]="uploadProgress()"
+              ></progress>
+              <p class="hint">{{ uploadProgress() }} % des octets transmis</p>
+            } @else {
+              <progress
+                class="upload-progress"
+                [attr.aria-label]="'Progression de l’envoi'"
+              ></progress>
+              <p class="hint">Envoi en cours…</p>
+            }
+          </div>
+        }
       </div>
-      @if (audioUrl()) {
-        <audio [src]="audioUrl()" controls autoplay></audio>
+    </div>
+
+    <p class="status" role="status" aria-live="polite">
+      @if (uploading()) {
+        Envoi du fichier en cours, merci de patienter…
       }
-    </article>
-  </div>
+      @if (uploadSuccess()) {
+        <span class="alert alert-success">{{ uploadSuccess() }}</span>
+      }
+    </p>
+
+    @if (uploadError()) {
+      <p class="error alert alert-error" role="alert">{{ uploadError() }}</p>
+    }
+  </section>
+
+  <section class="card library" aria-labelledby="library-heading">
+    <div class="library-header">
+      <h2 id="library-heading" #libraryHeading tabindex="-1">Mes pistes</h2>
+      <button type="button" class="btn-secondary refresh" (click)="load()" [disabled]="loading()">
+        Actualiser
+      </button>
+    </div>
+
+    <div class="search" role="search" aria-label="Filtrer mes pistes">
+      <label for="track-search" class="search-label">Filtrer par titre</label>
+      <div class="search-field">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path
+            d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
+            fill="currentColor"
+          />
+        </svg>
+        <input
+          id="track-search"
+          #searchInput
+          type="search"
+          [formControl]="search"
+          [attr.maxlength]="searchMaxLength"
+          placeholder="Ex. : blues"
+          autocomplete="off"
+          aria-describedby="search-hint"
+        />
+        @if (searchText() || query()) {
+          <button
+            type="button"
+            class="btn-secondary clear"
+            (click)="clearSearch()"
+            aria-label="Effacer le filtre"
+          >
+            Effacer
+          </button>
+        }
+      </div>
+      <p class="hint" id="search-hint">Recherche dans les titres de toute votre bibliothèque.</p>
+    </div>
+
+    <p class="status" role="status" aria-live="polite">
+      @if (loading()) {
+        Chargement de la page {{ page() }}…
+      } @else {
+        {{ resultsAnnouncement() }}
+      }
+    </p>
+
+    @if (error()) {
+      <p class="error alert alert-error" role="alert">{{ error() }}</p>
+    }
+
+    @if (loading() && tracks().length === 0) {
+      <ul class="tracks" aria-hidden="true">
+        @for (index of skeletons(); track index) {
+          <li class="track-card skeleton-card">
+            <div class="cover-slot skeleton"></div>
+            <div class="track-body">
+              <div class="skeleton skeleton-line wide"></div>
+              <div class="skeleton skeleton-line"></div>
+            </div>
+          </li>
+        }
+      </ul>
+    } @else if (tracks().length > 0) {
+      <ul
+        class="tracks"
+        [class.stale]="loading()"
+        [attr.aria-busy]="loading()"
+        aria-label="Liste de mes morceaux"
+      >
+        @for (track of tracks(); track track.id) {
+          <li
+            class="track-card"
+            [class.playing]="playingTrack()?.id === track.id"
+            [attr.aria-current]="playingTrack()?.id === track.id ? 'true' : null"
+            [attr.aria-busy]="coverBusyId() === track.id"
+          >
+            <div class="cover-slot">
+              <app-track-cover [track]="track" [version]="coverVersion(track.id)" />
+            </div>
+
+            <div class="track-body">
+              <h3 class="track-title">{{ track.title }}</h3>
+              @if (track.artist || track.album) {
+                <p class="track-artist">
+                  {{ track.artist }}@if (track.artist && track.album) { · }{{ track.album }}
+                </p>
+              }
+              <p class="meta file-name">{{ track.originalName }}</p>
+              <p class="meta">
+                <span class="badge">{{ formatKind(track.mimeType) }}</span>
+                <span>{{ formatSize(track.size) }}</span>
+                <span aria-hidden="true">·</span>
+                <time [attr.datetime]="track.createdAt">
+                  {{ track.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+                </time>
+              </p>
+              @if (track.hasCover && track.coverSource) {
+                <p class="meta">
+                  <span class="badge source-badge">
+                    <span class="visually-hidden">Source de la pochette : </span>
+                    {{ coverSourceLabel(track.coverSource) }}
+                  </span>
+                </p>
+              }
+              @if (playingTrack()?.id === track.id) {
+                <p class="now-playing">
+                  <span class="equalizer" aria-hidden="true"><i></i><i></i><i></i></span>
+                  Lecture en cours
+                </p>
+              }
+            </div>
+
+            <div class="track-actions">
+              <button
+                type="button"
+                class="play"
+                (click)="play(track)"
+                [disabled]="audioLoadingId() === track.id || deletingId() === track.id"
+                [attr.aria-busy]="audioLoadingId() === track.id"
+                [attr.aria-label]="'Lire ' + track.title"
+              >
+                @if (audioLoadingId() === track.id) {
+                  <span aria-hidden="true">…</span>
+                } @else {
+                  <span aria-hidden="true">▶</span>
+                }
+                <span class="action-text" aria-hidden="true">Lire</span>
+              </button>
+              <button
+                type="button"
+                class="delete"
+                (click)="remove(track)"
+                [disabled]="deletingId() === track.id || coverBusyId() === track.id"
+                [attr.aria-busy]="deletingId() === track.id"
+                [attr.aria-label]="'Supprimer ' + track.title"
+              >
+                {{ deletingId() === track.id ? 'Suppression…' : 'Supprimer' }}
+              </button>
+            </div>
+
+            <div class="cover-actions" role="group" [attr.aria-label]="'Pochette de ' + track.title">
+              <button
+                type="button"
+                class="btn-secondary change-cover"
+                (click)="pickCover(track)"
+                [disabled]="coverBusyId() !== '' || deletingId() === track.id"
+                [attr.aria-busy]="coverBusyId() === track.id"
+                [attr.aria-label]="'Changer la pochette de ' + track.title"
+              >
+                Changer la pochette
+              </button>
+              <button
+                type="button"
+                class="btn-secondary search-cover"
+                (click)="searchCover(track)"
+                [disabled]="coverBusyId() !== '' || deletingId() === track.id"
+                [attr.aria-busy]="coverBusyId() === track.id"
+                [attr.aria-label]="'Chercher sur le Web une pochette pour ' + track.title"
+              >
+                Chercher sur le Web
+              </button>
+              @if (track.hasCover) {
+                <button
+                  type="button"
+                  class="btn-secondary remove-cover"
+                  (click)="removeCover(track)"
+                  [disabled]="coverBusyId() !== '' || deletingId() === track.id"
+                  [attr.aria-busy]="coverBusyId() === track.id"
+                  [attr.aria-label]="'Retirer la pochette de ' + track.title"
+                >
+                  Retirer la pochette
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    } @else if (!loading() && !error()) {
+      @if (query()) {
+        <div class="empty empty-search">
+          <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
+              fill="currentColor"
+            />
+          </svg>
+          <p class="empty-title">Aucune piste ne correspond à “{{ query() }}”.</p>
+          <p class="hint">Vérifiez l’orthographe ou essayez un mot plus court.</p>
+          <button type="button" class="btn-secondary" (click)="clearSearch()">
+            Effacer le filtre
+          </button>
+        </div>
+      } @else if (total() === 0) {
+        <div class="empty empty-library">
+          <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M9 18.5A2.5 2.5 0 1 1 7 16V5l12-2v12.5a2.5 2.5 0 1 1-2-2.45V7.2L9 8.5v10Z"
+              fill="currentColor"
+            />
+          </svg>
+          <p class="empty-title">Votre bibliothèque est vide.</p>
+          <p class="hint">Importez votre premier morceau avec le formulaire ci-dessus.</p>
+        </div>
+      } @else {
+        <div class="empty empty-page">
+          <p class="empty-title">Cette page ne contient plus de piste.</p>
+          <p class="hint">Des morceaux ont peut-être été supprimés depuis un autre onglet.</p>
+          <button type="button" class="btn-secondary" (click)="backToFirstPage()">
+            Revenir à la première page
+          </button>
+        </div>
+      }
+    }
+
+    <input
+      #coverPicker
+      class="visually-hidden"
+      type="file"
+      tabindex="-1"
+      aria-hidden="true"
+      [accept]="coverAcceptAttribute"
+      (change)="onCoverPicked($event)"
+    />
+
+    @if (total() > 0) {
+      <mat-paginator
+        class="paginator"
+        [length]="total()"
+        [pageIndex]="page() - 1"
+        [pageSize]="limit()"
+        [pageSizeOptions]="pageSizeOptions"
+        [showFirstLastButtons]="true"
+        [disabled]="loading()"
+        (page)="onPage($event)"
+        aria-label="Pagination de la bibliothèque"
+      />
+    }
+
+    @if (audioError()) {
+      <p class="error alert alert-error" role="alert">{{ audioError() }}</p>
+    }
+
+    @if (audioUrl()) {
+      <div class="player" role="region" aria-label="Lecteur audio">
+        <p class="player-title" aria-live="polite">
+          <span class="equalizer" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>En cours de lecture : <b>{{ playingTrack()?.title }}</b></span>
+        </p>
+        <audio
+          [src]="audioUrl()"
+          controls
+          autoplay
+          (error)="onAudioError()"
+          [attr.aria-label]="'Lecteur audio : ' + (playingTrack()?.title ?? '')"
+        ></audio>
+      </div>
+    }
+  </section>
 </section>
