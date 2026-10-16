@@ -1,1 +1,39 @@
-:host { display: block; max-width: 520px; margin: 0 auto; }
+:host { display: block; max-width: 440px; margin: var(--space-6) auto; }
+
+.card { padding: var(--space-6) var(--space-5); box-shadow: var(--shadow-md); }
+h1 { margin: 0 0 var(--space-2); font-size: 1.75rem; }
+.lead { margin: 0 0 var(--space-5); color: var(--text-muted); }
+.alert { margin: 0 0 var(--space-4); }
+
+.card form { gap: var(--space-4); }
+.field { display: grid; gap: var(--space-2); }
+.field label { margin: 0; }
+input { width: 100%; min-height: 2.75rem; }
+
+/* Bouton afficher/masquer : superposé au champ, cible tactile 44 px. */
+.password-wrap { position: relative; }
+.password-wrap input { padding-right: 3.25rem; }
+.toggle {
+  position: absolute; top: 0; bottom: 0; right: 0; width: 2.75rem; padding: 0;
+  display: grid; place-items: center; color: var(--text-muted); background: transparent;
+  border-radius: var(--radius-sm);
+}
+.toggle:hover:not(:disabled) { color: var(--text); background: var(--surface-2); }
+
+.submit {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  width: 100%; min-height: 2.75rem;
+}
+.spinner {
+  width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.alt-link { margin: var(--space-5) 0 0; text-align: center; color: var(--text-muted); }
+.alt-link a { display: inline-flex; align-items: center; min-height: 2.75rem; font-weight: 600; }
+
+@media (max-width: 720px) {
+  :host { margin: var(--space-4) auto; }
+  .card { padding: var(--space-5) var(--space-4); }
+}

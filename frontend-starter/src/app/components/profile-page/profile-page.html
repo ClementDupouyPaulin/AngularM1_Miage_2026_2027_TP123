@@ -1,14 +1,76 @@
-<section class="card">
-  <h1>Mon profil</h1>
-  <button type="button" (click)="load()">Charger mon profil</button>
-  @if (auth.currentUser(); as user) {
-    <p>
-      <b>{{ user.name }}</b><br />{{ user.email }}<br />
-      Membre depuis {{ user.createdAt.slice(0, 10) }}
+<section class="profile" aria-labelledby="profile-title">
+  <div class="page-head">
+    <h1 id="profile-title">Mon profil</h1>
+    <button type="button" class="btn-secondary" (click)="load()" [disabled]="loading()">
+      {{ loading() ? 'Chargement…' : 'Recharger mon profil' }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="alert alert-error" role="alert" data-testid="profile-error">{{ error() }}</p>
+  }
+  @if (confirmation()) {
+    <p class="alert alert-success" role="status" data-testid="profile-confirmation">
+      {{ confirmation() }}
     </p>
-    <form [formGroup]="form" (ngSubmit)="save()">
-      <label>Nouveau nom<input formControlName="name" /></label>
-      <button type="submit">Enregistrer</button>
+  }
+
+  @if (auth.currentUser(); as user) {
+    <div class="card identity">
+      <div class="avatar" aria-hidden="true" data-testid="profile-avatar">{{ initials() }}</div>
+      <div class="identity-text">
+        <b class="identity-name" data-testid="profile-name">{{ user.name }}</b>
+        <span class="identity-email">{{ user.email }}</span>
+        <span class="hint">
+          Membre depuis <time [attr.datetime]="user.createdAt">{{ memberSince() }}</time>
+        </span>
+      </div>
+    </div>
+
+    <form class="card" [formGroup]="form" (ngSubmit)="save()" [attr.aria-busy]="saving()" novalidate>
+      <h2>Modifier mon nom</h2>
+      <div class="field">
+        <label for="profile-name-input">Nouveau nom</label>
+        <input
+          id="profile-name-input"
+          formControlName="name"
+          autocomplete="name"
+          required
+          [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched"
+          [attr.aria-describedby]="
+            form.controls.name.invalid && form.controls.name.touched ? 'profile-name-error' : null
+          "
+        />
+        @if (form.controls.name.invalid && form.controls.name.touched) {
+          <p class="field-error" id="profile-name-error" data-testid="name-error">
+            {{
+            form.controls.name.hasError('required')
+              ? 'Le nom est obligatoire.'
+              : 'Le nom doit contenir au moins 2 caractères.'
+          }}
+          </p>
+        }
+      </div>
+      <button type="submit" class="submit" [disabled]="!canSave() || saving()">
+        @if (saving()) {
+          <span class="spinner" aria-hidden="true"></span>
+        }
+        {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+      </button>
     </form>
+  } @else if (loading()) {
+    <div class="card" aria-busy="true" data-testid="profile-skeleton">
+      <span class="visually-hidden" role="status">Chargement du profil…</span>
+      <div class="identity" aria-hidden="true">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="identity-text">
+          <div class="skeleton skeleton-line skeleton-line-lg"></div>
+          <div class="skeleton skeleton-line"></div>
+          <div class="skeleton skeleton-line skeleton-line-sm"></div>
+        </div>
+      </div>
+    </div>
+  } @else if (!error()) {
+    <p class="card">Aucune information de profil disponible.</p>
   }
 </section>

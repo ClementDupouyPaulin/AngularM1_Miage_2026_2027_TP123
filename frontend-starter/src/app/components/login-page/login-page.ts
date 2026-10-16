@@ -13,27 +13,48 @@ export class LoginPageComponent {
   private readonly router = inject(Router);
 
   readonly error = signal('');
+  readonly submitting = signal(false);
+  readonly showPassword = signal(false);
   readonly form = new FormGroup({
     email: new FormControl('demo@example.com', {
       nonNullable: true,
       validators: [Validators.required, Validators.email],
     }),
-    password: new FormControl('Demo1234!', {
+    // Jamais de mot de passe en dur dans le code frontend (voir AGENTS.md) :
+    // celui du compte de démonstration est documenté dans SUJET_ETUDIANT_TP1.md.
+    password: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required],
     }),
   });
 
+  togglePassword(): void {
+    this.showPassword.update((visible) => !visible);
+  }
+
   submit(): void {
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      return;
+    }
+
     const values = this.form.getRawValue();
+    this.error.set('');
+    this.submitting.set(true);
+
     this.auth.login(values.email, values.password).subscribe({
       next: () => {
+        // Aucun token n'est loggué : seule la réussite de l'étape est tracée.
         console.debug('[LoginPage] Connexion réussie');
+        this.submitting.set(false);
         void this.router.navigateByUrl('/tracks');
       },
-      error: (error: { error?: { message?: string } }) => {
+      error: (error: unknown) => {
         console.error('[LoginPage] Échec de connexion', error);
-        this.error.set(error.error?.message ?? 'Erreur de connexion');
+        this.submitting.set(false);
+        this.error.set(
+          this.auth.messageFromError(error, 'Connexion impossible. Vérifiez vos identifiants.'),
+        );
       },
     });
   }

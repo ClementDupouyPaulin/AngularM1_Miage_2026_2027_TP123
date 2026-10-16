@@ -1,13 +1,109 @@
-<section class="card">
-  <h1>Créer un compte</h1>
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <label>Nom<input formControlName="name" /></label>
-    <label>Email<input type="email" formControlName="email" /></label>
-    <label>Mot de passe<input type="password" formControlName="password" /></label>
-    <button type="submit">Créer mon compte</button>
-  </form>
+<section class="card" aria-labelledby="register-title">
+  <h1 id="register-title">Créer un compte</h1>
+  <p class="lead">Quelques secondes suffisent pour accéder à vos backing tracks.</p>
+
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <p class="alert alert-error" role="alert" data-testid="register-error">{{ error() }}</p>
   }
-  <p><a routerLink="/login">Déjà inscrit ?</a></p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" [attr.aria-busy]="submitting()" novalidate>
+    <div class="field">
+      <label for="register-name">Nom</label>
+      <input
+        id="register-name"
+        formControlName="name"
+        autocomplete="name"
+        required
+        [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched"
+        [attr.aria-describedby]="
+          form.controls.name.invalid && form.controls.name.touched ? 'register-name-error' : null
+        "
+      />
+      @if (form.controls.name.invalid && form.controls.name.touched) {
+        <p class="field-error" id="register-name-error" data-testid="name-error">
+          {{
+            form.controls.name.hasError('required')
+              ? 'Le nom est obligatoire.'
+              : 'Le nom doit contenir au moins 2 caractères.'
+          }}
+        </p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="register-email">Email</label>
+      <input
+        id="register-email"
+        type="email"
+        formControlName="email"
+        autocomplete="email"
+        required
+        [attr.aria-invalid]="form.controls.email.invalid && form.controls.email.touched"
+        [attr.aria-describedby]="
+          form.controls.email.invalid && form.controls.email.touched
+            ? 'register-email-error'
+            : null
+        "
+      />
+      @if (form.controls.email.invalid && form.controls.email.touched) {
+        <p class="field-error" id="register-email-error" data-testid="email-error">
+          Saisissez une adresse email valide (exemple : prenom&#64;domaine.fr).
+        </p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="register-password">Mot de passe</label>
+      <div class="password-wrap">
+        <input
+          id="register-password"
+          [type]="showPassword() ? 'text' : 'password'"
+          formControlName="password"
+          autocomplete="new-password"
+          required
+          [attr.aria-invalid]="form.controls.password.invalid && form.controls.password.touched"
+          [attr.aria-describedby]="
+            form.controls.password.invalid && form.controls.password.touched
+              ? 'register-password-hint register-password-error'
+              : 'register-password-hint'
+          "
+        />
+        <button
+          type="button"
+          class="toggle"
+          data-testid="toggle-password"
+          aria-label="Afficher le mot de passe"
+          aria-controls="register-password"
+          [attr.aria-pressed]="showPassword()"
+          (click)="togglePassword()"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @if (showPassword()) {
+              <path d="M17.94 17.94A10.9 10.9 0 0 1 12 20c-7 0-10-8-10-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22" />
+            } @else {
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
+              <circle cx="12" cy="12" r="3" />
+            }
+          </svg>
+        </button>
+      </div>
+      <p class="hint" id="register-password-hint">
+        8 caractères minimum. Mélangez lettres, chiffres et symboles pour plus de sécurité.
+      </p>
+      @if (form.controls.password.invalid && form.controls.password.touched) {
+        <p class="field-error" id="register-password-error" data-testid="password-error">
+          Le mot de passe doit contenir au moins 8 caractères.
+        </p>
+      }
+    </div>
+
+    <button type="submit" class="submit" [disabled]="form.invalid || submitting()">
+      @if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span>
+      }
+      {{ submitting() ? 'Création en cours…' : 'Créer mon compte' }}
+    </button>
+  </form>
+
+  <p class="alt-link">Déjà inscrit ? <a routerLink="/login">Se connecter</a></p>
 </section>

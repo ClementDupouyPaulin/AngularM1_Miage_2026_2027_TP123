@@ -1,12 +1,84 @@
-<section class="card">
-  <h1>Connexion</h1>
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <label>Email<input type="email" formControlName="email" /></label>
-    <label>Mot de passe<input type="password" formControlName="password" /></label>
-    <button type="submit">Se connecter</button>
-  </form>
+<section class="card" aria-labelledby="login-title">
+  <h1 id="login-title">Connexion</h1>
+  <p class="lead">Retrouvez vos backing tracks et reprenez votre entraînement.</p>
+
   @if (error()) {
-    <p class="error">{{ error() }}</p>
+    <p class="alert alert-error" role="alert" data-testid="login-error">{{ error() }}</p>
   }
-  <p><a routerLink="/register">Créer un compte</a></p>
+
+  <form [formGroup]="form" (ngSubmit)="submit()" [attr.aria-busy]="submitting()" novalidate>
+    <div class="field">
+      <label for="login-email">Email</label>
+      <input
+        id="login-email"
+        type="email"
+        formControlName="email"
+        autocomplete="email"
+        required
+        [attr.aria-invalid]="form.controls.email.invalid && form.controls.email.touched"
+        [attr.aria-describedby]="
+          form.controls.email.invalid && form.controls.email.touched ? 'login-email-error' : null
+        "
+      />
+      @if (form.controls.email.invalid && form.controls.email.touched) {
+        <p class="field-error" id="login-email-error" data-testid="email-error">
+          Saisissez une adresse email valide (exemple : prenom&#64;domaine.fr).
+        </p>
+      }
+    </div>
+
+    <div class="field">
+      <label for="login-password">Mot de passe</label>
+      <div class="password-wrap">
+        <input
+          id="login-password"
+          [type]="showPassword() ? 'text' : 'password'"
+          formControlName="password"
+          autocomplete="current-password"
+          required
+          [attr.aria-invalid]="form.controls.password.invalid && form.controls.password.touched"
+          [attr.aria-describedby]="
+            form.controls.password.invalid && form.controls.password.touched
+              ? 'login-password-hint login-password-error'
+              : 'login-password-hint'
+          "
+        />
+        <button
+          type="button"
+          class="toggle"
+          data-testid="toggle-password"
+          aria-label="Afficher le mot de passe"
+          aria-controls="login-password"
+          [attr.aria-pressed]="showPassword()"
+          (click)="togglePassword()"
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            @if (showPassword()) {
+              <path d="M17.94 17.94A10.9 10.9 0 0 1 12 20c-7 0-10-8-10-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.9 10.9 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22" />
+            } @else {
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" />
+              <circle cx="12" cy="12" r="3" />
+            }
+          </svg>
+        </button>
+      </div>
+      <p class="hint" id="login-password-hint">
+        Le mot de passe du compte de démonstration est indiqué dans l'énoncé du TP.
+      </p>
+      @if (form.controls.password.invalid && form.controls.password.touched) {
+        <p class="field-error" id="login-password-error" data-testid="password-error">
+          Le mot de passe est obligatoire.
+        </p>
+      }
+    </div>
+
+    <button type="submit" class="submit" [disabled]="form.invalid || submitting()">
+      @if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span>
+      }
+      {{ submitting() ? 'Connexion en cours…' : 'Se connecter' }}
+    </button>
+  </form>
+
+  <p class="alt-link">Pas encore de compte ? <a routerLink="/register">Créer un compte</a></p>
 </section>
