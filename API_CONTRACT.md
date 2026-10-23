@@ -20,6 +20,11 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | DELETE | `/tracks/:id/cover` | JWT | `204` |
 | GET | `/tracks/:id/cover/search` | JWT | `200 CoverSearch` |
 | POST | `/tracks/:id/cover/web` | `{ "imageUrl": "https://…" }` + JWT | `200 Track` (`coverSource: "web"`) |
+| GET | `/clips?page=1&limit=5&q=poursuite` | JWT | `Page<ClipSummary>` |
+| POST | `/clips` | multipart : `video`, `title` (optionnel), `analysis` (JSON texte) + JWT | `201 Clip` |
+| GET | `/clips/:id` | JWT | `200 Clip` |
+| GET | `/clips/:id/video` | JWT | flux vidéo (`Content-Type` vérifié) |
+| DELETE | `/clips/:id` | JWT | `204` (supprime aussi le fichier vidéo) |
 
 `Track` : `id`, `ownerId`, `title`, `originalName`, `mimeType`, `size`, `createdAt`, `artist` et `album` (`string | null`), `hasCover` (booléen), `coverSource` (`"upload" | "id3" | "web" | null`). Les noms de fichiers sur disque ne sont jamais renvoyés.
 
@@ -34,3 +39,15 @@ Pochettes : JPEG, PNG ou WebP, 2 Mo maximum, type vérifié sur les octets du fi
 `POST /tracks/:id/cover/web` n'accepte que des URL `https` dont l'hôte termine par `.mzstatic.com` (sans port ni identifiants) ; chaque redirection est revalidée (3 maximum), délai 5 s, 2 Mo maximum.
 
 Erreurs courantes : `400` validation (fichier manquant, format refusé, `q` > 100 caractères, image invalide ou trop lourde, URL ou redirection refusée, téléchargement impossible), `401` authentification (y compris routes de pochette), `404` ressource (piste inconnue ou d'autrui : `"Piste inconnue"` ; pochette absente : `"Pochette absente"`), `409` email déjà utilisé, `502` service iTunes indisponible (recherche). Corps d'erreur : `{ "message": "..." }`.
+
+## Film Pulse : `/clips`
+
+`ClipSummary` : `id`, `title`, `originalName`, `mimeType` (`"video/mp4" | "video/webm"`), `size`, `durationSec`, `cutCount`, `avgShotLength` (secondes), `syncScore` (`number | null`), `createdAt`. `Clip` = `ClipSummary` + `analysis`. Les noms de fichiers sur disque ne sont jamais renvoyés.
+
+`analysis` = `{ "version": 1, "durationSec": number, "cuts": number[], "beats": number[], "syncScore": number | null }`, calculée par le navigateur et validée strictement par le serveur : aucun autre champ, `version` égale à 1, `durationSec` dans `]0, 120]`, `cuts` et `beats` tableaux de 2000 nombres finis maximum, triés par ordre croissant et compris dans `[0, durationSec]`, `syncScore` nul ou nombre fini dans `[0, 10]` (indicatif). `cutCount` (= nombre de coupes) et `avgShotLength` (= `durationSec / (cutCount + 1)`) sont **recalculés côté serveur** ; ils ne sont pas acceptés dans `analysis`.
+
+Vidéos acceptées : MP4 ou WebM, 50 Mo maximum ; le `Content-Type` déclaré doit correspondre aux octets du fichier (boîte `ftyp` pour MP4, en-tête EBML `1A 45 DF A3` pour WebM). Sans `title`, le nom du fichier sert de repli (200 caractères maximum). Tout refus après réception supprime le fichier du disque.
+
+`Page<ClipSummary>` suit les mêmes règles que `Page<Track>` (`page`, `limit` 1 à 20, `q` sur le titre, littéral, 100 caractères maximum, tri `createdAt` décroissant).
+
+Erreurs : `400` (vidéo manquante, format refusé, octets non conformes, vidéo trop lourde, `analysis` manquante ou invalide, `q` > 100 caractères), `401` authentification, `404` `"Clip inconnu"` (inexistant, d'autrui ou identifiant invalide), `500` si la métadonnée est supprimée mais pas le fichier vidéo. Corps d'erreur : `{ "message": "..." }`.

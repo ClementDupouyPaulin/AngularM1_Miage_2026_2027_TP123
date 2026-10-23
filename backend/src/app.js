@@ -10,6 +10,7 @@ import mongoose from "mongoose";
 import { parseFile, selectCover } from "music-metadata";
 import { User } from "./models/User.js";
 import { Track, toPublicTrack, TAG_MAX_LENGTH } from "./models/Track.js";
+import { Clip, toPublicClip, ANALYSIS_VERSION } from "./models/Clip.js";
 
 // Les fichiers audio restent sur le disque du serveur dans ce TP.
 // MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
@@ -65,6 +66,17 @@ const COVER_HOST_SUFFIX = ".mzstatic.com";
 const MAX_URL_LENGTH = 2048;
 const REMOTE_TIMEOUT_MS = 5000;
 const MAX_REDIRECTS = 3;
+// Film Pulse : les vidéos sont stockées à plat dans UPLOADS, comme l'audio.
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+const VIDEO_TOO_LARGE = "Vidéo trop volumineuse (50 Mo maximum)";
+const VIDEO_MIME_TYPES = new Set(["video/mp4", "video/webm"]);
+const VIDEO_SIGNATURE_LENGTH = 12;
+const WEBM_SIGNATURE = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+const MAX_CLIP_DURATION_SEC = 120;
+const MAX_ANALYSIS_POINTS = 2000;
+const MAX_SYNC_SCORE = 10;
+const ANALYSIS_KEYS = ["version", "durationSec", "cuts", "beats", "syncScore"];
+
 const COVER_ATTRIBUTION =
   "Pochettes fournies par l'API iTunes Search d'Apple ; elles restent la propriété de leurs ayants droit.";
 
@@ -192,6 +204,100 @@ async function replaceCover(track, cover) {
     throw error;
   }
   if (previous) await removeFile(path.join(COVERS, previous));
+}
+
+/** Retrouve un clip du propriétaire connecté (null si inconnu ou d'autrui). */
+async function findOwnedClip(req) {
+  if (!mongoose.isValidObjectId(req.params.id)) return null;
+  return Clip.findOne({ _id: req.params.id, ownerId: req.auth.sub }).select("+storedName");
+}
+
+function unknownClip(req, res) {
+  console.warn(`[clips] Clip introuvable ou interdit : ${req.params.id}`);
+  return res.status(404).json({ message: "Clip inconnu" });
+}
+
+/** Identifie MP4 (boîte `ftyp`) ou WebM (en-tête EBML) par les premiers octets du fichier. */
+async function detectVideoType(filePath) {
+  const handle = await fsPromises.open(filePath, "r");
+  try {
+    const bytes = Buffer.alloc(VIDEO_SIGNATURE_LENGTH);
+    const { bytesRead } = await handle.read(bytes, 0, VIDEO_SIGNATURE_LENGTH, 0);
+    if (bytesRead >= 8 && bytes.toString("latin1", 4, 8) === "ftyp") return "video/mp4";
+    if (bytes.subarray(0, WEBM_SIGNATURE.length).equals(WEBM_SIGNATURE)) return "video/webm";
+    return null;
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Vérifie qu'un tableau de temps est court, fini, trié et compris dans [0, durée]. */
+function validateTimes(values, durationSec, name) {
+  if (!Array.isArray(values) || values.length > MAX_ANALYSIS_POINTS) {
+    throw new HttpError(400, `Analyse invalide : ${name} doit être un tableau de ${MAX_ANALYSIS_POINTS} valeurs maximum`);
+  }
+  values.forEach((value, index) => {
+    const valid =
+      typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= durationSec &&
+      (index === 0 || value >= values[index - 1]);
+    if (!valid) {
+      throw new HttpError(400, `Analyse invalide : ${name} doit contenir des temps triés dans [0, durée]`);
+    }
+  });
+  return values;
+}
+
+/** Analyse le champ texte `analysis` ; toute valeur hors contrat est refusée. */
+function parseAnalysis(raw) {
+  if (typeof raw !== "string" || !raw) throw new HttpError(400, "Analyse requise");
+  let analysis;
+  try {
+    analysis = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "Analyse invalide : JSON attendu");
+  }
+  if (typeof analysis !== "object" || analysis === null || Array.isArray(analysis)) {
+    throw new HttpError(400, "Analyse invalide : objet attendu");
+  }
+  if (Object.keys(analysis).some((key) => !ANALYSIS_KEYS.includes(key))) {
+    throw new HttpError(400, "Analyse invalide : champ inattendu");
+  }
+  if (analysis.version !== ANALYSIS_VERSION) {
+    throw new HttpError(400, "Analyse invalide : version non prise en charge");
+  }
+
+  const { durationSec, syncScore } = analysis;
+  if (
+    typeof durationSec !== "number" ||
+    !Number.isFinite(durationSec) ||
+    durationSec <= 0 ||
+    durationSec > MAX_CLIP_DURATION_SEC
+  ) {
+    throw new HttpError(400, `Analyse invalide : durée entre 0 et ${MAX_CLIP_DURATION_SEC} s attendue`);
+  }
+  const syncScoreValid =
+    syncScore === null ||
+    (typeof syncScore === "number" &&
+      Number.isFinite(syncScore) &&
+      syncScore >= 0 &&
+      syncScore <= MAX_SYNC_SCORE);
+  if (!syncScoreValid) {
+    throw new HttpError(400, `Analyse invalide : syncScore entre 0 et ${MAX_SYNC_SCORE} ou null attendu`);
+  }
+
+  const cuts = validateTimes(analysis.cuts, durationSec, "cuts");
+  const beats = validateTimes(analysis.beats, durationSec, "beats");
+  return {
+    durationSec,
+    cuts,
+    beats,
+    syncScore,
+    cutCount: cuts.length,
+    avgShotLength: durationSec / (cuts.length + 1),
+  };
 }
 
 /** Échappe les métacaractères pour qu'une recherche reste une simple sous-chaîne. */
@@ -377,6 +483,25 @@ const coverUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_COVER_SIZE, files: 1 },
 });
+
+// Instance distincte : les limites et formats vidéo ne doivent pas toucher l'upload audio.
+const videoUpload = multer({
+  storage,
+  limits: { fileSize: MAX_VIDEO_SIZE, files: 1 },
+  fileFilter: (_request, file, callback) => {
+    if (VIDEO_MIME_TYPES.has(file.mimetype)) return callback(null, true);
+    console.warn(`[multer] Type vidéo refusé : ${file.mimetype}`);
+    return callback(new HttpError(400, "Format vidéo non accepté (MP4 ou WebM)"));
+  },
+});
+
+/** Reçoit le champ multipart `video` et traduit le dépassement de taille. */
+function receiveVideo(req, res, next) {
+  videoUpload.single("video")(req, res, (error) => {
+    if (error?.code === "LIMIT_FILE_SIZE") return next(new HttpError(400, VIDEO_TOO_LARGE));
+    next(error);
+  });
+}
 
 /** Reçoit le champ multipart `cover` et traduit le dépassement de taille. */
 function receiveCover(req, res, next) {
@@ -847,6 +972,158 @@ export function createApp() {
       res.json(track.toPublic());
     } catch (error) {
       console.error("[covers] Erreur d'import de la pochette Web", error);
+      next(error);
+    }
+  });
+
+  /** Retourne une page des résumés de clips de l'utilisateur (sans cuts ni beats). */
+  app.get("/api/clips", auth, async (req, res, next) => {
+    try {
+      const page = Math.min(MAX_PAGE, Math.max(1, Math.floor(Number(req.query.page)) || 1));
+      const limit = Math.min(20, Math.max(1, Math.floor(Number(req.query.limit)) || 5));
+      const rawQuery = req.query.q ?? "";
+
+      if (typeof rawQuery !== "string") {
+        console.warn("[clips] Paramètre q invalide");
+        return res.status(400).json({ message: "Paramètre de recherche invalide" });
+      }
+      const search = rawQuery.trim();
+      if (search.length > MAX_QUERY_LENGTH) {
+        console.warn(`[clips] Recherche trop longue (${search.length} caractères)`);
+        return res.status(400).json({
+          message: `Recherche limitée à ${MAX_QUERY_LENGTH} caractères`,
+        });
+      }
+
+      console.log(
+        `[clips] Lecture page=${page}, limit=${limit}, filtre=${search ? "oui" : "non"}, user=${req.auth.sub}`,
+      );
+
+      const match = { ownerId: new mongoose.Types.ObjectId(req.auth.sub) };
+      if (search) match.title = { $regex: escapeRegex(search), $options: "i" };
+
+      const aggregate = Clip.aggregate([
+        { $match: match },
+        { $project: { storedName: 0, cuts: 0, beats: 0 } },
+      ]);
+      const result = await Clip.aggregatePaginate(aggregate, {
+        page,
+        limit,
+        sort: { createdAt: -1 },
+      });
+
+      console.log(`[clips] ${result.docs.length} clip(s) envoyé(s) sur ${result.totalDocs}`);
+
+      res.json({
+        items: result.docs.map(toPublicClip),
+        page: result.page,
+        limit: result.limit,
+        total: result.totalDocs,
+        pages: result.totalPages,
+        hasPrevPage: result.hasPrevPage,
+        hasNextPage: result.hasNextPage,
+        prevPage: result.prevPage,
+        nextPage: result.nextPage,
+      });
+    } catch (error) {
+      console.error("[clips] Erreur de pagination", error);
+      next(error);
+    }
+  });
+
+  /**
+   * Reçoit la vidéo (`video`), son titre et l'analyse calculée par le navigateur.
+   * Le fichier est écrit par Multer avant la validation : tout refus le supprime.
+   */
+  app.post("/api/clips", auth, receiveVideo, async (req, res, next) => {
+    const videoFile = req.file;
+    try {
+      if (!videoFile) {
+        console.warn(`[clips] Upload sans vidéo par ${req.auth.sub}`);
+        return res.status(400).json({ message: "Fichier vidéo requis" });
+      }
+
+      const detectedType = await detectVideoType(videoFile.path);
+      if (detectedType !== videoFile.mimetype) {
+        throw new HttpError(400, "Fichier vidéo invalide : MP4 ou WebM attendu");
+      }
+      const analysis = parseAnalysis(req.body?.analysis);
+      const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+
+      const clip = await Clip.create({
+        ownerId: req.auth.sub,
+        title: title || videoFile.originalname,
+        originalName: videoFile.originalname,
+        storedName: videoFile.filename,
+        mimeType: detectedType,
+        size: videoFile.size,
+        ...analysis,
+      });
+
+      console.log(`[clips] Clip enregistré : ${clip.id} (${clip.cutCount} coupe(s))`);
+      res.status(201).json(clip.toPublic());
+    } catch (error) {
+      console.error("[clips] Upload refusé ou en échec après l'écriture du fichier", error);
+      if (videoFile) await removeFile(path.join(UPLOADS, videoFile.filename));
+      next(error);
+    }
+  });
+
+  /** Retourne le détail d'un clip du propriétaire, analyse comprise. */
+  app.get("/api/clips/:id", auth, async (req, res, next) => {
+    try {
+      const clip = await findOwnedClip(req);
+      if (!clip) return unknownClip(req, res);
+      console.log(`[clips] Détail envoyé : ${clip.id}`);
+      res.json(clip.toPublic());
+    } catch (error) {
+      console.error("[clips] Erreur de lecture du clip", error);
+      next(error);
+    }
+  });
+
+  /** Envoie la vidéo d'un clip du propriétaire avec son type vérifié. */
+  app.get("/api/clips/:id/video", auth, async (req, res, next) => {
+    try {
+      const clip = await findOwnedClip(req);
+      if (!clip) return unknownClip(req, res);
+
+      res.type(clip.mimeType);
+      res.set("X-Content-Type-Options", "nosniff");
+      res.sendFile(path.join(UPLOADS, clip.storedName), (error) => {
+        if (error) {
+          console.error(`[clips] Erreur d'envoi vidéo ${clip.id}`, error);
+          if (!res.headersSent) next(error);
+          return;
+        }
+        console.log(`[clips] Vidéo envoyée : ${clip.id}`);
+      });
+    } catch (error) {
+      console.error("[clips] Erreur de préparation du flux vidéo", error);
+      next(error);
+    }
+  });
+
+  /** Supprime le clip et son fichier vidéo. */
+  app.delete("/api/clips/:id", auth, async (req, res, next) => {
+    try {
+      if (!mongoose.isValidObjectId(req.params.id)) return unknownClip(req, res);
+      const clip = await Clip.findOneAndDelete({
+        _id: req.params.id,
+        ownerId: req.auth.sub,
+      }).select("+storedName");
+      if (!clip) return unknownClip(req, res);
+
+      if (!(await removeFile(path.join(UPLOADS, clip.storedName)))) {
+        return res.status(500).json({
+          message: "Métadonnée supprimée, mais fichier vidéo non supprimé",
+        });
+      }
+
+      console.log(`[clips] Clip supprimé : ${clip.id}`);
+      res.status(204).end();
+    } catch (error) {
+      console.error("[clips] Erreur de suppression", error);
       next(error);
     }
   });
