@@ -5,10 +5,24 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { EMPTY, Observable, catchError, filter, map, merge, switchMap, tap } from 'rxjs';
+import {
+  EMPTY,
+  MonoTypeOperatorFunction,
+  Observable,
+  Subject,
+  catchError,
+  filter,
+  map,
+  merge,
+  pipe,
+  switchMap,
+  takeUntil,
+  tap,
+} from 'rxjs';
 import { MAX_K, MIN_K } from '../../shared/analysis/cut-detector';
 import { rhythmProfile } from '../../shared/analysis/rhythm';
 import { estimateTempo } from '../../shared/analysis/tempo';
+import { VISIBILITY_LABELS, formatDecimal, interpretSyncScore } from '../../shared/format/clip-format';
 import { Clip, ClipAnalysis, ClipAnnotation } from '../../shared/models/clip.model';
 import { AuthService } from '../../shared/services/auth.service';
 import { ClipAnalyzerService } from '../../shared/services/clip-analyzer.service';
@@ -31,10 +45,7 @@ import {
 import {
   ANNOTATION_MAX_LENGTH,
   TITLE_MAX_LENGTH,
-  VISIBILITY_LABELS,
   annotationTime,
-  formatDecimal,
-  interpretSyncScore,
   parseTags,
   sortAnnotations,
   tagsError,
@@ -56,6 +67,8 @@ export type { SyncInterpretation } from './montage';
 /** Pas du curseur de sensibilité (le serveur accepte tout k de [1, 6]). */
 export const SENSITIVITY_STEP = 0.5;
 const NOT_BLANK = /\S/;
+/** Délai avant révocation de l'URL d'un téléchargement, le temps que le navigateur la lise. */
+const DOWNLOAD_REVOKE_DELAY_MS = 1000;
 
 type MediaAsset = { kind: 'video' | 'filmstrip'; blob: Blob };
 
@@ -90,6 +103,8 @@ export class ClipDetailComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** Émet à chaque changement d'`:id` : coupe les requêtes lancées pour l'extrait précédent. */
+  private readonly clipChange = new Subject<void>();
 
   private readonly player = viewChild(VideoPlayerComponent);
   private readonly annotationInput = viewChild<ElementRef<HTMLTextAreaElement>>('annotationInput');
@@ -244,15 +259,16 @@ export class ClipDetailComponent {
     const clip = this.clip();
     const preview = this.preview();
     if (!clip || !preview || !clip.isOwner || this.savingAnalysis()) return;
+    const sentSensitivity = this.sensitivity();
     this.savingAnalysis.set(true);
     this.analysisMessage.set('');
     this.service
       .updateAnalysis(clip.id, preview)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(this.whileSameClip())
       .subscribe({
         next: (updated) => {
           console.debug('[Montage] Analyse enregistrée', updated.id, updated.analysis.sensitivity);
-          this.applyClip(updated);
+          this.applySavedAnalysis(updated, sentSensitivity);
           this.savingAnalysis.set(false);
           this.analysisMessage.set(`Analyse enregistrée : ${updated.analysis.cuts.length} coupes.`);
         },
@@ -291,7 +307,7 @@ export class ClipDetailComponent {
     this.annotationError.set('');
     this.service
       .addAnnotation(clip.id, { time, text: this.annotationText.value.trim() })
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(this.whileSameClip())
       .subscribe({
         next: (annotation) => {
           this.clip.update((current) =>
@@ -314,7 +330,7 @@ export class ClipDetailComponent {
     if (!clip) return;
     this.service
       .removeAnnotation(clip.id, annotation.id)
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(this.whileSameClip())
       .subscribe({
         next: () => {
           this.clip.update((current) =>
@@ -359,7 +375,7 @@ export class ClipDetailComponent {
     this.metaError.set('');
     this.service
       .patch(clip.id, { title: this.metaForm.controls.title.value.trim(), tags })
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(this.whileSameClip())
       .subscribe({
         next: (updated) => {
           this.applyClip(updated, true);
@@ -390,7 +406,7 @@ export class ClipDetailComponent {
       .afterClosed()
       .pipe(
         filter((updated): updated is Clip => !!updated),
-        takeUntilDestroyed(this.destroyRef),
+        this.whileSameClip(),
       )
       .subscribe((updated) => {
         this.applyClip(updated, true);
@@ -419,7 +435,7 @@ export class ClipDetailComponent {
           this.actionError.set('');
         }),
         switchMap(() => this.service.remove(clip.id)),
-        takeUntilDestroyed(this.destroyRef),
+        this.whileSameClip(),
       )
       .subscribe({
         next: () => {
@@ -479,7 +495,7 @@ export class ClipDetailComponent {
     link.download = fileName;
     link.click();
     // Révocation différée : le téléchargement doit d'abord avoir lu l'URL.
-    setTimeout(() => URL.revokeObjectURL(url));
+    setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_REVOKE_DELAY_MS);
   }
 
   /** Applique un extrait reçu du serveur ; `keepPreview` garde un réglage local non enregistré. */
@@ -490,7 +506,23 @@ export class ClipDetailComponent {
     this.sensitivity.set(clip.analysis.sensitivity);
   }
 
+  /** Limite une requête à l'extrait affiché : annulée au changement d'`:id` comme à la destruction. */
+  private whileSameClip<T>(): MonoTypeOperatorFunction<T> {
+    return pipe(takeUntil(this.clipChange), takeUntilDestroyed(this.destroyRef));
+  }
+
+  /**
+   * Après « Enregistrer » : le réglage local n'est effacé que s'il n'a pas bougé
+   * pendant l'envoi ; sinon il reste en aperçu, sauf s'il rejoint la valeur enregistrée.
+   */
+  private applySavedAnalysis(updated: Clip, sentSensitivity: number): void {
+    const changedMeanwhile = this.sensitivity() !== sentSensitivity;
+    this.applyClip(updated, changedMeanwhile);
+    if (changedMeanwhile && this.sensitivity() === updated.analysis.sensitivity) this.preview.set(null);
+  }
+
   private reset(): void {
+    this.clipChange.next();
     this.revokeUrls();
     this.clip.set(null);
     this.preview.set(null);
@@ -504,6 +536,12 @@ export class ClipDetailComponent {
     this.analysisMessage.set('');
     this.exportMessage.set('');
     this.actionError.set('');
+    this.savingAnalysis.set(false);
+    this.annotationSaving.set(false);
+    this.annotationError.set('');
+    this.metaSaving.set(false);
+    this.metaError.set('');
+    this.deleting.set(false);
   }
 
   /** Extrait, puis vidéo et pellicule en parallèle ; n'émet que les `Blob`, les erreurs sont affichées. */

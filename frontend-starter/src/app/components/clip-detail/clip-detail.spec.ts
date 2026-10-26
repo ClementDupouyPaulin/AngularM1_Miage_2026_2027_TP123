@@ -3,7 +3,7 @@ import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { ActivatedRoute, ParamMap, Router, convertToParamMap, provideRouter } from '@angular/router';
-import { BehaviorSubject, Observable, of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, Subject, of, throwError } from 'rxjs';
 import { Clip, ClipAnalysis, ClipAnnotation } from '../../shared/models/clip.model';
 import { User } from '../../shared/models/user.model';
 import { AuthService } from '../../shared/services/auth.service';
@@ -175,6 +175,52 @@ describe('ClipDetailComponent', () => {
     });
   });
 
+  describe('changement d’extrait pendant une requête', () => {
+    function switchToC2() {
+      service.get.mockReturnValue(of(makeClip({ id: 'c2', title: 'Dialogue' })));
+      paramMap.next(convertToParamMap({ id: 'c2' }));
+    }
+
+    it('annule l’ajout d’annotation lancé sur l’extrait précédent', () => {
+      const pending = new Subject<ClipAnnotation>();
+      service.addAnnotation.mockReturnValue(pending);
+      const { component } = setup();
+      component.annotationText.setValue('Raccord');
+      component.addAnnotation();
+      expect(pending.observed).toBe(true);
+
+      switchToC2();
+      expect(pending.observed).toBe(false);
+      pending.next(annotation('n', 2));
+      expect(component.clip()?.id).toBe('c2');
+      expect(component.clip()?.annotations).toEqual([]);
+      expect(component.annotationSaving()).toBe(false);
+    });
+
+    it('annule l’enregistrement d’analyse et de métadonnées de l’extrait précédent', () => {
+      analyzer.rebuild.mockReturnValue({ ...ANALYSIS, sensitivity: 5 });
+      const analysis = new Subject<Clip>();
+      const meta = new Subject<Clip>();
+      service.updateAnalysis.mockReturnValue(analysis);
+      service.patch.mockReturnValue(meta);
+      const { component } = setup();
+      component.onSensitivityInput(5);
+      component.saveAnalysis();
+      component.startEditing();
+      component.saveMetadata();
+
+      switchToC2();
+      expect(analysis.observed).toBe(false);
+      expect(meta.observed).toBe(false);
+      analysis.next(makeClip({ title: 'Ancien' }));
+      meta.next(makeClip({ title: 'Ancien' }));
+      expect(component.clip()?.id).toBe('c2');
+      expect(component.clip()?.title).toBe('Dialogue');
+      expect(component.savingAnalysis()).toBe(false);
+      expect(component.metaSaving()).toBe(false);
+    });
+  });
+
   describe('erreurs', () => {
     it('affiche un 404 sans charger la vidéo', () => {
       const { root } = setup(throwError(() => new HttpErrorResponse({ status: 404 })));
@@ -238,6 +284,39 @@ describe('ClipDetailComponent', () => {
       fixture.detectChanges();
       expect(component.analysis()).toBe(ANALYSIS);
       expect(component.sensitivity()).toBe(3);
+    });
+
+    it('garde le réglage modifié pendant l’enregistrement', () => {
+      const moved: ClipAnalysis = { ...ANALYSIS, cuts: [], transitions: [], sensitivity: 6 };
+      analyzer.rebuild.mockImplementation((_: ClipAnalysis, k: number) => (k === 6 ? moved : rebuilt));
+      const saved = new Subject<Clip>();
+      service.updateAnalysis.mockReturnValue(saved);
+      const { root, component } = setup();
+      slide(root, '5');
+      component.saveAnalysis();
+      slide(root, '6');
+      saved.next(makeClip({ analysis: rebuilt, cutCount: 1 }));
+
+      expect(component.clip()?.analysis).toBe(rebuilt);
+      expect(component.sensitivity()).toBe(6);
+      expect(component.analysis()).toBe(moved);
+      expect(component.dirty()).toBe(true);
+      expect(component.savingAnalysis()).toBe(false);
+    });
+
+    it('efface l’aperçu si le réglage revient à la valeur enregistrée pendant l’envoi', () => {
+      analyzer.rebuild.mockReturnValue(rebuilt);
+      const saved = new Subject<Clip>();
+      service.updateAnalysis.mockReturnValue(saved);
+      const { root, component } = setup();
+      slide(root, '5');
+      component.saveAnalysis();
+      slide(root, '4');
+      slide(root, '5');
+      saved.next(makeClip({ analysis: rebuilt, cutCount: 1 }));
+
+      expect(component.dirty()).toBe(false);
+      expect(component.sensitivity()).toBe(5);
     });
 
     it('signale un échec d’enregistrement', () => {

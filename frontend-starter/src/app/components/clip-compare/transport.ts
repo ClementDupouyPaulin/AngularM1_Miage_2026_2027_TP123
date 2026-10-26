@@ -11,6 +11,8 @@ export type SyncMode = 'absolute' | 'relative';
 
 /** Écart toléré entre le lecteur suiveur et sa cible avant de le recaler. */
 export const DRIFT_TOLERANCE_SEC = 0.15;
+/** Délai laissé au suiveur après un recalage pour terminer son déplacement avant d'en tenter un autre. */
+export const RESYNC_COOLDOWN_MS = 400;
 
 export const SPEED_OPTIONS: readonly number[] = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
@@ -62,6 +64,28 @@ export function resyncTarget(
 ): number | null {
   if (!playing || !Number.isFinite(actual) || !Number.isFinite(target)) return null;
   return Math.abs(actual - target) > tolerance ? target : null;
+}
+
+export interface FollowerState {
+  time: number;
+  playing: boolean;
+  seeking: boolean;
+}
+
+/**
+ * Comme `resyncTarget`, mais sans recalage pendant un déplacement en cours ni
+ * avant `cooldownMs` après le précédent (`lastResyncMs` = `null` si aucun).
+ */
+export function followerResync(
+  follower: FollowerState,
+  target: number,
+  nowMs: number,
+  lastResyncMs: number | null,
+  cooldownMs = RESYNC_COOLDOWN_MS,
+): number | null {
+  if (follower.seeking) return null;
+  if (lastResyncMs !== null && nowMs - lastResyncMs < cooldownMs) return null;
+  return resyncTarget(follower.time, target, follower.playing);
 }
 
 /** Côté de référence (horloge maîtresse) : le plus long, A en cas d'égalité. */

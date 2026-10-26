@@ -247,6 +247,25 @@ describe('ClipsPageComponent', () => {
       expect(component.canAnalyze()).toBe(true);
     });
 
+    it('ignore un résultat arrivé après l’annulation sans créer d’ObjectURL', async () => {
+      setup();
+      const createSpy = vi.spyOn(URL, 'createObjectURL');
+      analyzer.analyze.mockImplementation(
+        (_file: File, options: ClipAnalyzeOptions) =>
+          new Promise((resolve) =>
+            options.signal?.addEventListener('abort', () => resolve(result(makeAnalysis(), new Blob(['jpeg'])))),
+          ),
+      );
+      component.selectFile(videoFile());
+      component.cancelAnalysis();
+      await vi.waitFor(() => expect(component.analyzing()).toBe(false));
+
+      expect(component.analysis()).toBeNull();
+      expect(component.filmstripUrl()).toBe('');
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(component.analysisNotice()).toBe('Analyse annulée.');
+    });
+
     it('affiche une erreur d’analyse lisible', async () => {
       setup();
       analyzer.analyze.mockRejectedValue(new ClipAnalysisError('too-long'));

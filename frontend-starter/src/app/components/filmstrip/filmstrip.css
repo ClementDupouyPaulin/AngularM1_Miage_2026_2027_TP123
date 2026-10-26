@@ -62,7 +62,7 @@
   text-align: center;
 }
 
-.cell.active .time { color: var(--accent); font-weight: 700; }
+.cell.active .time { color: var(--accent-text); font-weight: 700; }
 
 .empty { padding: var(--space-3); color: var(--text-muted); }
 

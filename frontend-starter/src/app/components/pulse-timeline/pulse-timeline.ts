@@ -187,6 +187,8 @@ export class PulseTimelineComponent {
   }
 
   onPlotClick(event: MouseEvent): void {
+    // 2e clic d'un double-clic : seul `dblclick` agit, sinon la tête de lecture bouge deux fois.
+    if (event.detail > 1) return;
     const point = this.pointAt(event);
     if (point === null) return;
     if (event.shiftKey) this.annotateAt.emit(point.time);

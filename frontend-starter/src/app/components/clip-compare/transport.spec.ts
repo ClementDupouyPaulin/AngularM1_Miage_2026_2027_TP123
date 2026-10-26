@@ -5,6 +5,8 @@ import {
   playbackRateFor,
   positionFromSideTime,
   referenceSide,
+  RESYNC_COOLDOWN_MS,
+  followerResync,
   resyncTarget,
   targetTime,
 } from './transport';
@@ -63,5 +65,27 @@ describe('transport de la comparaison', () => {
     expect(referenceSide({ a: 30, b: 60 })).toBe('b');
     expect(referenceSide({ a: 60, b: 30 })).toBe('a');
     expect(referenceSide({ a: 30, b: 30 })).toBe('a');
+  });
+
+  describe('followerResync', () => {
+    const playing = { time: 9.5, playing: true, seeking: false };
+
+    it('recale un suiveur en lecture qui dérive', () => {
+      expect(followerResync(playing, 10, 1000, null)).toBe(10);
+    });
+
+    it('ne recale pas pendant un déplacement en cours', () => {
+      expect(followerResync({ ...playing, seeking: true }, 10, 1000, null)).toBeNull();
+    });
+
+    it('attend la temporisation après un recalage', () => {
+      expect(followerResync(playing, 10, 1000 + RESYNC_COOLDOWN_MS - 1, 1000)).toBeNull();
+      expect(followerResync(playing, 10, 1000 + RESYNC_COOLDOWN_MS, 1000)).toBe(10);
+    });
+
+    it('respecte la tolérance et l’arrêt', () => {
+      expect(followerResync({ ...playing, time: 9.9 }, 10, 1000, null)).toBeNull();
+      expect(followerResync({ ...playing, playing: false }, 10, 1000, null)).toBeNull();
+    });
   });
 });

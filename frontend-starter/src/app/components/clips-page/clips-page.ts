@@ -26,9 +26,16 @@ import {
   MAX_CLIP_DURATION_SEC,
   SAMPLE_FPS,
 } from '../../shared/services/clip-analyzer.service';
+import {
+  VISIBILITY_LABELS,
+  formatDecimal,
+  formatDuration,
+  formatSyncScore,
+  isSynced,
+  syncScoreLabel,
+} from '../../shared/format/clip-format';
 import { ClipListFilters, ClipService } from '../../shared/services/clip.service';
 import { ClipCardComponent } from '../clip-card/clip-card';
-import { VISIBILITY_LABELS, formatDecimal, formatDuration, isSynced, syncScoreLabel } from '../clip-card/clip-format';
 import { FilmstripComponent } from '../filmstrip/filmstrip';
 import { formatTimecode } from '../pulse-timeline/chart-math';
 import { PulseTimelineComponent } from '../pulse-timeline/pulse-timeline';
@@ -155,6 +162,7 @@ export class ClipsPageComponent {
   readonly formatDuration = formatDuration;
   readonly formatTimecode = formatTimecode;
   readonly formatDecimal = formatDecimal;
+  readonly formatSyncScore = formatSyncScore;
 
   /** Message ponctuel (sélection, étiquettes) lu par les lecteurs d'écran. */
   readonly announcement = signal('');
@@ -497,6 +505,8 @@ export class ClipsPageComponent {
         onProgress: (ratio) => this.analysisProgress.set(Math.round(Math.min(1, Math.max(0, ratio)) * PERCENT)),
         onSample: (sample) => this.pushSample(sample),
       });
+      // Annulé (ou page détruite) pendant que l'analyse se terminait : on n'applique rien.
+      if (controller.signal.aborted) throw new ClipAnalysisError('aborted');
       this.flushLive();
       this.baseAnalysis.set(result.analysis);
       this.sensitivity.set(result.analysis.sensitivity);

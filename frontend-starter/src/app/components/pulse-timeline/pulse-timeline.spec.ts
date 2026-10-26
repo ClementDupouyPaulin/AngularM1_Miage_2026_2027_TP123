@@ -138,6 +138,15 @@ describe('PulseTimelineComponent', () => {
     expect(annotates).toEqual([30, 45]);
   });
 
+  it('ne déplace la tête qu’une fois lors d’un double-clic', () => {
+    const plot = mockPlot(100, 400);
+    plot.dispatchEvent(new MouseEvent('click', { clientX: 200, detail: 1, bubbles: true }));
+    plot.dispatchEvent(new MouseEvent('click', { clientX: 200, detail: 2, bubbles: true }));
+    plot.dispatchEvent(new MouseEvent('dblclick', { clientX: 200, detail: 2, bubbles: true }));
+    expect(seeks).toEqual([15]);
+    expect(annotates).toEqual([15]);
+  });
+
   it('s’aimante sur une coupe proche et affiche temps et vignette au survol', () => {
     fixture.componentRef.setInput('filmstripUrl', 'blob:sprite');
     const plot = mockPlot(0, 600);

@@ -33,7 +33,7 @@ import {
   playbackRateFor,
   positionFromSideTime,
   referenceSide,
-  resyncTarget,
+  followerResync,
   targetTime,
 } from './transport';
 
@@ -155,6 +155,8 @@ export class ClipCompareComponent {
   private readonly players = viewChildren<ElementRef<HTMLVideoElement>>('player');
   private readonly mediaRequests: Record<Side, Subject<Clip | null>> = { a: new Subject(), b: new Subject() };
   private frame: number | null = null;
+  /** Instant (`performance.now()`) du dernier recalage du suiveur, `null` si aucun depuis le lancement. */
+  private lastResyncMs: number | null = null;
 
   private readonly loadedClips = computed(() =>
     SIDES.map((side) => this.states()[side])
@@ -381,6 +383,7 @@ export class ClipCompareComponent {
   }
 
   private stopLoop(): void {
+    this.lastResyncMs = null;
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
   }
@@ -396,8 +399,16 @@ export class ClipCompareComponent {
     const follower = otherSide(reference);
     const video = this.player(follower);
     if (!video) return;
-    const fix = resyncTarget(video.currentTime, this.sideTimes()[follower], !video.paused && !video.ended);
-    if (fix !== null) video.currentTime = fix;
+    const now = performance.now();
+    const fix = followerResync(
+      { time: video.currentTime, playing: !video.paused && !video.ended, seeking: video.seeking },
+      this.sideTimes()[follower],
+      now,
+      this.lastResyncMs,
+    );
+    if (fix === null) return;
+    video.currentTime = fix;
+    this.lastResyncMs = now;
   }
 
   private loadLists(): void {

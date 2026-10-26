@@ -3,7 +3,7 @@ import { Subject, of, throwError } from 'rxjs';
 import { ClipSummary } from '../../shared/models/clip.model';
 import { ClipService } from '../../shared/services/clip.service';
 import { ClipCardComponent } from './clip-card';
-import { formatDuration, syncScoreLabel } from './clip-format';
+import { formatDuration, syncScoreLabel } from '../../shared/format/clip-format';
 
 function makeSummary(id: string, overrides: Partial<ClipSummary> = {}): ClipSummary {
   return {
@@ -98,6 +98,63 @@ describe('ClipCardComponent', () => {
 
     expect(pending.observed).toBe(false);
     expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  describe('chargement différé de l’affiche', () => {
+    let observers: FakeObserver[];
+
+    class FakeObserver {
+      readonly targets: Element[] = [];
+      disconnected = false;
+      constructor(readonly callback: IntersectionObserverCallback) {
+        observers.push(this);
+      }
+      observe(target: Element): void {
+        this.targets.push(target);
+      }
+      disconnect(): void {
+        this.disconnected = true;
+      }
+      emit(isIntersecting: boolean): void {
+        this.callback([{ isIntersecting } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+        fixture.detectChanges();
+      }
+    }
+
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal('IntersectionObserver', FakeObserver);
+    });
+
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('attend l’entrée à l’écran pour charger l’affiche, puis la garde hors écran', () => {
+      setup(makeSummary('c1'));
+      expect(observers[0].targets).toEqual([fixture.nativeElement]);
+      expect(service.filmstrip).not.toHaveBeenCalled();
+
+      observers[0].emit(true);
+      expect(service.filmstrip).toHaveBeenCalledWith('c1');
+      expect(el('.poster-img')?.getAttribute('src')).toBe('blob:poster');
+
+      observers[0].emit(false);
+      expect(el('.poster-img')?.getAttribute('src')).toBe('blob:poster');
+      fixture.destroy();
+      expect(observers[0].disconnected).toBe(true);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:poster');
+    });
+
+    it('annule la requête si la carte quitte l’écran avant la réponse', () => {
+      const pending = new Subject<Blob>();
+      service.filmstrip.mockReturnValue(pending);
+      setup(makeSummary('c1'));
+
+      observers[0].emit(true);
+      expect(pending.observed).toBe(true);
+      observers[0].emit(false);
+      expect(pending.observed).toBe(false);
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+    });
   });
 
   it('affiche code temporel, rythme, synchro, étiquettes et visibilité accessible', () => {

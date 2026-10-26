@@ -8,7 +8,7 @@ import { ClipSummary } from '../../shared/models/clip.model';
 import { Page } from '../../shared/models/page.model';
 import { ClipService, DiscoverOptions } from '../../shared/services/clip.service';
 import { ClipCardComponent } from '../clip-card/clip-card';
-import { DiscoverPageComponent, SEARCH_DEBOUNCE_MS, rankLabel } from './discover-page';
+import { DiscoverPageComponent, RANKING_SIZE, SEARCH_DEBOUNCE_MS, rankLabel } from './discover-page';
 
 @Component({
   selector: 'app-clip-card',
@@ -200,7 +200,7 @@ describe('DiscoverPageComponent', () => {
           return of(makePage([makeClip('n1', { avgShotLength: 0.8 }), makeClip('n2'), makeClip('n3'), makeClip('n4')]));
         }
         if (options.sort === 'synced') {
-          return of(makePage([makeClip('s1', { syncScore: 3.456 }), makeClip('s2', { syncScore: null })]));
+          return of(makePage([makeClip('s1', { syncScore: 3.456 }), makeClip('s2', { syncScore: 1.2 })]));
         }
         return of(makePage([]));
       });
@@ -233,8 +233,19 @@ describe('DiscoverPageComponent', () => {
       expect(rows[0].querySelector('.owner')?.textContent).toContain('Ada Lovelace');
 
       const synced = element().querySelector('[data-board="synced"]')!;
-      expect(synced.querySelectorAll('tbody tr').length).toBe(1);
-      expect(synced.querySelector('.metric')?.textContent).toContain('3,46');
+      expect(synced.querySelectorAll('tbody tr').length).toBe(2);
+      expect(synced.querySelector('.metric')?.textContent).toContain('× 3,46');
+    });
+
+    it('affiche les RANKING_SIZE entrées renvoyées par le serveur sans les refiltrer', () => {
+      const full = Array.from({ length: RANKING_SIZE }, (_, index) => makeClip(`r${index}`, { syncScore: 1 + index / 10 }));
+      setup(() => of(makePage(full)));
+      (element().querySelector('#discover-tab-rankings') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      for (const board of ['nervous', 'synced']) {
+        expect(element().querySelectorAll(`[data-board="${board}"] tbody tr`).length).toBe(RANKING_SIZE);
+      }
     });
 
     it('ouvre l’extrait au clic sur une ligne', () => {

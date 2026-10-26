@@ -1,9 +1,12 @@
 import { Clip } from '../../shared/models/clip.model';
 import { RhythmProfile, RhythmTone, rhythmProfile } from '../../shared/analysis/rhythm';
-import { SYNC_ALIGNED_THRESHOLD } from '../../shared/analysis/sync-score';
 import { estimateTempo } from '../../shared/analysis/tempo';
+import { formatDecimal, interpretSyncScore } from '../../shared/format/clip-format';
 import { formatTime } from '../pulse-timeline/pulse-timeline';
 import { Side } from './transport';
+
+export { formatDecimal, interpretSyncScore } from '../../shared/format/clip-format';
+export type { SyncInterpretation } from '../../shared/format/clip-format';
 
 export const SIDES: readonly Side[] = ['a', 'b'];
 
@@ -35,11 +38,6 @@ export interface SideProfile {
   fadeCount: number;
 }
 
-export interface SyncInterpretation {
-  value: string;
-  verdict: string;
-}
-
 export const NERVOUS_BADGE = { label: 'Plus nerveux', icon: '⚡' } as const;
 export const SYNCED_BADGE = { label: 'Plus calé sur la musique', icon: '♪' } as const;
 
@@ -51,20 +49,8 @@ export const TONE_CHIPS: Record<RhythmTone, string> = {
   intense: 'chip-rec',
 };
 
-export function formatDecimal(value: number, digits: number): string {
-  return value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
 export function otherSide(side: Side): Side {
   return side === 'a' ? 'b' : 'a';
-}
-
-export function interpretSyncScore(score: number | null): SyncInterpretation {
-  if (score === null || !Number.isFinite(score)) return { value: '—', verdict: 'Bande-son non analysable' };
-  const value = `× ${formatDecimal(score, 2)}`;
-  return score >= SYNC_ALIGNED_THRESHOLD
-    ? { value, verdict: 'Calé sur la musique' }
-    : { value, verdict: 'Sans lien avec la musique' };
 }
 
 export function sideProfile(clip: Clip): SideProfile {

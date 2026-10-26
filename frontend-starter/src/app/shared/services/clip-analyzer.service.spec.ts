@@ -7,6 +7,7 @@ import {
   MAX_FILMSTRIP_BYTES,
   MAX_THUMBNAILS,
   SAMPLE_FPS,
+  AUDIO_DECODE_TIMEOUT_MS,
   SEEK_TIMEOUT_MS,
   mixToMono,
 } from './clip-analyzer.service';
@@ -84,6 +85,9 @@ class FakeAnalyzer extends ClipAnalyzerService {
   beforeFrame: (timeSec: number) => void = () => undefined;
   /** Si vrai, `frameAt` ne se résout jamais (seek bloqué). */
   frameHangs = false;
+  /** Si vrai, `decodeAudio` ne se résout jamais (décodage bloqué). */
+  audioHangs = false;
+  decodeStarted = false;
 
   probeDuration(video: EventTarget, signal?: AbortSignal): Promise<number> {
     return this.resolveDuration(video as HTMLMediaElement, signal);
@@ -110,6 +114,8 @@ class FakeAnalyzer extends ClipAnalyzerService {
   }
 
   protected override async decodeAudio(): Promise<DecodedAudio> {
+    this.decodeStarted = true;
+    if (this.audioHangs) return new Promise<DecodedAudio>(() => undefined);
     if (this.audio instanceof Error) throw this.audio;
     return this.audio;
   }
@@ -331,6 +337,34 @@ describe('ClipAnalyzerService', () => {
 
     await expect(analyzer.analyze(file, { signal: controller.signal })).rejects.toMatchObject({ code: 'aborted' });
     expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejette sur annulation pendant le décodage audio au lieu de se replier', async () => {
+    const controller = new AbortController();
+    analyzer.audioHangs = true;
+
+    const pending = analyzer.analyze(file, { signal: controller.signal });
+    await vi.waitFor(() => expect(analyzer.decodeStarted).toBe(true));
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'aborted' });
+    expect(revokeSpy).toHaveBeenCalledWith(OBJECT_URL);
+  });
+
+  it('se replie sur les coupes seules si le décodage audio dépasse le délai', async () => {
+    vi.useFakeTimers();
+    try {
+      analyzer.audioHangs = true;
+      const pending = analyzer.analyze(file);
+
+      await vi.advanceTimersByTimeAsync(AUDIO_DECODE_TIMEOUT_MS);
+
+      const { analysis: result } = await pending;
+      expect(result.beats).toEqual([]);
+      expect(result.syncScore).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('se replie sur les coupes seules si l’audio ne se décode pas', async () => {

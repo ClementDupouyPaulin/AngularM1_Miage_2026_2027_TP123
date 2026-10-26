@@ -31,6 +31,8 @@ export const MAX_FILMSTRIP_BYTES = 1024 * 1024;
 const JPEG_QUALITIES = [0.8, 0.6, 0.4];
 /** Délai maximal (ms) de la détection des beats dans le worker avant repli sur le thread principal. */
 export const WORKER_TIMEOUT_MS = 30000;
+/** Délai maximal (ms) du décodage de la piste audio avant repli sur l'analyse des coupes seule. */
+export const AUDIO_DECODE_TIMEOUT_MS = 30000;
 const TIME_DECIMALS = 1000;
 /** Délai maximal (ms) d'un déplacement dans la vidéo avant de la déclarer illisible. */
 export const SEEK_TIMEOUT_MS = 5000;
@@ -352,8 +354,9 @@ export class ClipAnalyzerService {
     throwIfAborted(signal);
     let audio: DecodedAudio;
     try {
-      audio = await this.decodeAudio(file);
-    } catch {
+      audio = await withDeadline(this.decodeAudio(file), AUDIO_DECODE_TIMEOUT_MS, signal);
+    } catch (error) {
+      if (error instanceof ClipAnalysisError && error.code === 'aborted') throw error;
       console.debug('[Analyzer] Piste audio non décodable, analyse des coupes seule');
       return [];
     }

@@ -1,5 +1,8 @@
-import { SYNC_ALIGNED_THRESHOLD } from '../../shared/analysis/sync-score';
-import { ClipAnnotation, ClipVisibility } from '../../shared/models/clip.model';
+import { formatDecimal } from '../../shared/format/clip-format';
+import { ClipAnnotation } from '../../shared/models/clip.model';
+
+export { interpretSyncScore } from '../../shared/format/clip-format';
+export type { SyncInterpretation } from '../../shared/format/clip-format';
 
 /**
  * Marge de « Coupe précédente » : pendant la lecture, juste après une coupe,
@@ -13,32 +16,6 @@ export const ANNOTATION_MAX_LENGTH = 280;
 export const TAG_MAX_COUNT = 5;
 export const TAG_MAX_LENGTH = 24;
 export const TITLE_MAX_LENGTH = 200;
-
-export interface SyncInterpretation {
-  value: string;
-  verdict: string;
-}
-
-export const VISIBILITY_LABELS: Readonly<Record<ClipVisibility, string>> = {
-  private: 'Privé',
-  shared: 'Partagé avec des amis',
-  public: 'Public',
-};
-
-export function formatDecimal(value: number, digits: number): string {
-  return value.toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-/** Libellé du score de synchro : ≈ 1 sans lien, > 1 calé, `null` non analysable. */
-export function interpretSyncScore(score: number | null): SyncInterpretation {
-  if (score === null || !Number.isFinite(score)) {
-    return { value: '—', verdict: 'Bande-son non analysable' };
-  }
-  const value = `× ${formatDecimal(score, 2)}`;
-  return score >= SYNC_ALIGNED_THRESHOLD
-    ? { value, verdict: 'Calé sur la musique' }
-    : { value, verdict: 'Sans lien avec la musique' };
-}
 
 /** Dernière coupe strictement avant `time - margin`, sinon `null`. */
 export function previousCut(cuts: readonly number[], time: number, margin = PREVIOUS_CUT_MARGIN_SEC): number | null {

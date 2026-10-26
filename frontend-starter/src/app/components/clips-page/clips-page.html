@@ -147,7 +147,7 @@
           <div class="stat">
             <dt class="stat-label">Synchro</dt>
             <dd class="stat-sync">
-              <span class="stat-value">{{ result.syncScore === null ? '—' : '×' + formatDecimal(result.syncScore, 1) }}</span>
+              <span class="stat-value">{{ formatSyncScore(result.syncScore) }}</span>
               <span class="chip" [class.chip-success]="synced()">{{ syncLabel() }}</span>
             </dd>
           </div>

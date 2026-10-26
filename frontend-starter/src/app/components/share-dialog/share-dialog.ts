@@ -10,6 +10,7 @@ import {
   MatDialogTitle,
 } from '@angular/material/dialog';
 import { RouterLink } from '@angular/router';
+import { VISIBILITY_LABELS } from '../../shared/format/clip-format';
 import { Clip, ClipPatch, ClipVisibility } from '../../shared/models/clip.model';
 import { FriendUser } from '../../shared/models/friend.model';
 import { ClipService } from '../../shared/services/clip.service';
@@ -29,9 +30,9 @@ export interface VisibilityOption {
 }
 
 export const VISIBILITY_OPTIONS: readonly VisibilityOption[] = [
-  { value: 'private', label: 'Privé', hint: 'Vous seul voyez cet extrait.' },
-  { value: 'shared', label: 'Partagé avec des amis', hint: 'Seuls les amis cochés le voient.' },
-  { value: 'public', label: 'Public', hint: 'Tout utilisateur connecté le trouve dans Découvrir.' },
+  { value: 'private', label: VISIBILITY_LABELS.private, hint: 'Vous seul voyez cet extrait.' },
+  { value: 'shared', label: VISIBILITY_LABELS.shared, hint: 'Seuls les amis cochés le voient.' },
+  { value: 'public', label: VISIBILITY_LABELS.public, hint: 'Tout utilisateur connecté le trouve dans Découvrir.' },
 ];
 
 /** Corps du PATCH : la liste d'amis n'a de sens qu'en mode partagé, sinon elle est vidée. */

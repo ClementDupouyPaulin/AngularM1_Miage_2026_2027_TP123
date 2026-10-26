@@ -5,6 +5,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { Router } from '@angular/router';
 import { Observable, Subject, catchError, debounceTime, filter, map, of, switchMap, tap } from 'rxjs';
+import { formatDecimal, formatSyncScore } from '../../shared/format/clip-format';
 import { ClipSummary, DiscoverScope, DiscoverSort } from '../../shared/models/clip.model';
 import { Page } from '../../shared/models/page.model';
 import { ClipService, DiscoverOptions } from '../../shared/services/clip.service';
@@ -48,20 +49,6 @@ export interface RankingState {
 type LoadResult = { ok: true; page: Page<ClipSummary> } | { ok: false; error: unknown };
 
 const EMPTY_RANKING: RankingState = { items: [], loading: false, error: '' };
-
-const DECIMAL_FORMATS = new Map<number, Intl.NumberFormat>();
-
-function formatDecimal(value: number, digits: number): string {
-  let format = DECIMAL_FORMATS.get(digits);
-  if (!format) {
-    format = new Intl.NumberFormat('fr-FR', {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    });
-    DECIMAL_FORMATS.set(digits, format);
-  }
-  return format.format(value);
-}
 
 /** « 1er », « 2e »… : le rang reste lisible sans les médailles décoratives. */
 export function rankLabel(index: number): string {
@@ -280,7 +267,7 @@ export class DiscoverPageComponent {
 
   metric(board: RankingId, clip: ClipSummary): string {
     if (board === 'nervous') return `${formatDecimal(clip.avgShotLength, 1)} s`;
-    return clip.syncScore === null ? '—' : `× ${formatDecimal(clip.syncScore, 2)}`;
+    return formatSyncScore(clip.syncScore);
   }
 
   emptyMessage(): string {
@@ -313,11 +300,8 @@ export class DiscoverPageComponent {
     return this.clips
       .discover({ scope: 'public', sort: id, page: 1, limit: RANKING_SIZE })
       .pipe(
-        map((page) =>
-          page.items
-            .filter((clip) => (id === 'synced' ? clip.syncScore !== null : clip.cutCount > 0))
-            .slice(0, RANKING_SIZE),
-        ),
+        // Le serveur écarte déjà les extraits sans coupe ou sans score : pas de filtrage client.
+        map((page) => page.items.slice(0, RANKING_SIZE)),
       );
   }
 
