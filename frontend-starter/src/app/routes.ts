@@ -1,5 +1,7 @@
 import { Routes } from '@angular/router';
 import { authGuard } from './shared/guards/auth.guard';
+import { DiscoverPageComponent } from './components/discover-page/discover-page';
+import { FriendsPageComponent } from './components/friends-page/friends-page';
 import { LoginPageComponent } from './components/login-page/login-page';
 import { ProfilePageComponent } from './components/profile-page/profile-page';
 import { RegisterPageComponent } from './components/register-page/register-page';
@@ -17,5 +19,7 @@ export const routes: Routes = [
   { path: 'clips', component: ClipsPageComponent, canActivate: [authGuard] },
   { path: 'clips/compare', component: ClipCompareComponent, canActivate: [authGuard] },
   { path: 'clips/:id', component: ClipDetailComponent, canActivate: [authGuard] },
+  { path: 'discover', component: DiscoverPageComponent, canActivate: [authGuard] },
+  { path: 'friends', component: FriendsPageComponent, canActivate: [authGuard] },
   { path: '**', redirectTo: 'tracks' },
 ];
