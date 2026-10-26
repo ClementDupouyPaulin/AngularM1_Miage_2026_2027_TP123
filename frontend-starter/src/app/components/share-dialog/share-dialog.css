@@ -1,0 +1,73 @@
+/*
+ * Encapsulation désactivée : le panneau est rendu dans l'overlay, hors de
+ * l'hôte. Toutes les règles sont préfixées par la classe de panneau.
+ */
+.clip-share-dialog {
+  --mat-dialog-container-color: var(--surface);
+  --mat-dialog-subhead-color: var(--text);
+  --mat-dialog-supporting-text-color: var(--text);
+  --mat-dialog-container-shape: var(--radius-lg);
+}
+
+.clip-share-dialog .mat-mdc-dialog-surface { border-top: 3px solid var(--accent); }
+.clip-share-dialog .mat-mdc-dialog-title { overflow-wrap: anywhere; }
+.clip-share-dialog .mat-mdc-dialog-content { display: grid; gap: var(--space-4); }
+.clip-share-dialog .mat-mdc-dialog-actions { gap: var(--space-2); }
+.clip-share-dialog button, .clip-share-dialog .btn { min-height: var(--tap); }
+
+.clip-share-dialog p { margin: 0; }
+
+.clip-share-dialog fieldset {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.clip-share-dialog legend { margin-bottom: var(--space-2); padding: 0; font-weight: 700; color: var(--text); }
+
+.clip-share-dialog .share-option,
+.clip-share-dialog .share-friend {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.clip-share-dialog .share-option.is-checked { border-color: var(--accent); background: var(--surface-2); }
+
+.clip-share-dialog input[type='radio'],
+.clip-share-dialog input[type='checkbox'] {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--accent);
+}
+
+.clip-share-dialog .share-option-text,
+.clip-share-dialog .share-friend > span { display: grid; gap: 0.1rem; min-width: 0; overflow-wrap: anywhere; }
+.clip-share-dialog .share-option-label,
+.clip-share-dialog .share-friend-name { font-weight: 650; }
+
+.clip-share-dialog .share-friend-list {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 16rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.clip-share-dialog .share-empty { display: grid; gap: var(--space-3); justify-items: start; color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .clip-share-dialog * { transition: none !important; }
+}

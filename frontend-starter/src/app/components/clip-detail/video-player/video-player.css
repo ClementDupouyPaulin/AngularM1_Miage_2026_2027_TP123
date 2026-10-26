@@ -1,0 +1,88 @@
+:host { display: block; }
+
+.player {
+  display: grid;
+  gap: var(--space-2);
+  overflow: hidden;
+  color: var(--banner-text);
+  background: var(--banner-bg);
+  border-radius: var(--radius-md);
+}
+
+.player:focus-within { box-shadow: 0 0 0 1px var(--border-strong); }
+
+.video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  aspect-ratio: 16 / 9;
+  background: var(--banner-bg);
+  cursor: pointer;
+}
+
+.video:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+.controls {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+.transport, .settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.controls .btn-ghost { color: var(--banner-text); }
+.controls .btn-ghost:hover:not(:disabled) { color: var(--banner-text); background: color-mix(in srgb, var(--banner-text) 14%, transparent); }
+.controls svg { width: 1.5rem; height: 1.5rem; }
+.play { border-radius: 999px; }
+
+.clock {
+  order: -1;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--banner-text);
+}
+
+.clock-total { color: var(--banner-muted); font-weight: 500; }
+
+.rate, .volume { display: inline-flex; align-items: center; margin: 0; }
+.rate .select { min-height: var(--tap); padding-block: 0; width: auto; }
+.volume input { width: 7rem; min-height: var(--tap); accent-color: var(--accent); }
+
+.shortcuts {
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--banner-muted);
+  font-size: 0.8125rem;
+}
+
+kbd {
+  padding: 0 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  border: 1px solid var(--banner-muted);
+  border-radius: var(--radius-sm);
+}
+
+.is-fullscreen { align-content: center; height: 100%; border-radius: 0; }
+.is-fullscreen .video { max-height: calc(100vh - 8rem); }
+
+@media (min-width: 720px) {
+  .controls {
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+  }
+  .transport { justify-content: flex-start; }
+  .settings { justify-content: flex-end; }
+  .clock { order: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .player * { transition: none !important; }
+}

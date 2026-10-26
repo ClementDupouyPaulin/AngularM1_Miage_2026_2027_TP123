@@ -1,0 +1,130 @@
+<div
+  #frame
+  class="player"
+  role="group"
+  [attr.aria-label]="'Lecteur : ' + label()"
+  aria-keyshortcuts="Space J K L ArrowLeft ArrowRight Shift+ArrowLeft Shift+ArrowRight"
+  [class.is-fullscreen]="fullscreen()"
+  (keydown)="onKeydown($event)"
+>
+  <video
+    #video
+    class="video"
+    preload="metadata"
+    playsinline
+    tabindex="0"
+    [src]="src()"
+    [attr.aria-label]="'Vidéo : ' + label() + ' (espace pour lire ou mettre en pause)'"
+    (click)="togglePlay()"
+    (play)="playing.set(true)"
+    (pause)="playing.set(false)"
+    (ended)="playing.set(false)"
+    (timeupdate)="onTimeUpdate()"
+    (seeked)="onTimeUpdate()"
+    (loadedmetadata)="onMetadata()"
+    (durationchange)="onMetadata()"
+    (ratechange)="onRateChange()"
+    (volumechange)="onVolumeChange()"
+  ></video>
+
+  <div class="controls">
+    <div class="transport">
+      <button
+        type="button"
+        class="btn-ghost btn-icon"
+        aria-label="Coupe précédente"
+        title="Coupe précédente"
+        [disabled]="previousCutTime() === null && currentTime() === 0"
+        (click)="goToPreviousCut()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 5h2v14H6zM20 5v14L9 12z" fill="currentColor" /></svg>
+      </button>
+      <button type="button" class="btn-ghost btn-icon" aria-label="Image précédente" title="Image précédente (←)" aria-keyshortcuts="ArrowLeft" (click)="step(-frameStep)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M15.4 6.6 14 5.2 7.2 12l6.8 6.8 1.4-1.4L10 12z" fill="currentColor" /></svg>
+      </button>
+      <button
+        type="button"
+        class="btn-primary btn-icon play"
+        [attr.aria-label]="playing() ? 'Pause' : 'Lecture'"
+        [title]="playing() ? 'Pause (espace ou K)' : 'Lecture (espace ou L)'"
+        aria-keyshortcuts="Space"
+        (click)="togglePlay()"
+      >
+        @if (playing()) {
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 5h4v14H7zm6 0h4v14h-4z" fill="currentColor" /></svg>
+        } @else {
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+        }
+      </button>
+      <button type="button" class="btn-ghost btn-icon" aria-label="Image suivante" title="Image suivante (→)" aria-keyshortcuts="ArrowRight" (click)="step(frameStep)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8.6 17.4 10 18.8l6.8-6.8L10 5.2 8.6 6.6 14 12z" fill="currentColor" /></svg>
+      </button>
+      <button
+        type="button"
+        class="btn-ghost btn-icon"
+        aria-label="Coupe suivante"
+        title="Coupe suivante"
+        [disabled]="nextCutTime() === null"
+        (click)="goToNextCut()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16 5h2v14h-2zM4 5v14l11-7z" fill="currentColor" /></svg>
+      </button>
+    </div>
+
+    <p class="timecode clock" aria-live="off">
+      <span class="visually-hidden">Position </span>{{ timecode() }}<span class="clock-total"> / {{ durationTimecode() }}</span>
+    </p>
+
+    <div class="settings">
+      <label class="rate">
+        <span class="visually-hidden">Vitesse de lecture</span>
+        <select class="select" [value]="rate()" (change)="setRate($any($event.target).value)">
+          @for (option of rates; track option) {
+            <option [value]="option" [selected]="option === rate()">{{ formatRate(option) }}</option>
+          }
+        </select>
+      </label>
+
+      <button
+        type="button"
+        class="btn-ghost btn-icon"
+        [attr.aria-label]="muted() ? 'Rétablir le son' : 'Couper le son'"
+        [attr.aria-pressed]="muted()"
+        (click)="toggleMute()"
+      >
+        @if (muted() || volume() === 0) {
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9v6h4l5 5V4L8 9zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z" fill="currentColor" /></svg>
+        } @else {
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9v6h4l5 5V4L8 9zm12.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z" fill="currentColor" /></svg>
+        }
+      </button>
+      <label class="volume">
+        <span class="visually-hidden">Volume</span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          [value]="volumePercent()"
+          [attr.aria-valuetext]="volumePercent() + ' %'"
+          (input)="setVolume($any($event.target).value)"
+        />
+      </label>
+
+      <button
+        type="button"
+        class="btn-ghost btn-icon"
+        [attr.aria-label]="fullscreen() ? 'Quitter le plein écran' : 'Plein écran'"
+        (click)="toggleFullscreen()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z" fill="currentColor" /></svg>
+      </button>
+    </div>
+  </div>
+
+  <p class="hint shortcuts">
+    Raccourcis : <kbd>Espace</kbd> lecture/pause, <kbd>J</kbd> recule de 5 s, <kbd>K</kbd> pause,
+    <kbd>L</kbd> lecture (répéter pour accélérer), <kbd>←</kbd>/<kbd>→</kbd> image par image,
+    <kbd>Maj</kbd> + flèche : une seconde.
+  </p>
+</div>

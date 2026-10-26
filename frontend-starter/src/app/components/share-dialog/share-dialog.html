@@ -1,0 +1,70 @@
+<h2 mat-dialog-title>Partager « {{ title }} »</h2>
+
+<mat-dialog-content>
+  <p id="share-dialog-description" class="share-intro">Choisissez qui peut voir cet extrait et son analyse.</p>
+
+  <fieldset class="share-options">
+    <legend>Visibilité</legend>
+    @for (option of options; track option.value) {
+      <label class="share-option" [class.is-checked]="visibility() === option.value">
+        <input
+          type="radio"
+          name="share-visibility"
+          [value]="option.value"
+          [checked]="visibility() === option.value"
+          [attr.aria-describedby]="'share-hint-' + option.value"
+          (change)="visibility.set(option.value); error.set('')"
+        />
+        <span class="share-option-text">
+          <span class="share-option-label">{{ option.label }}</span>
+          <span class="hint" [id]="'share-hint-' + option.value">{{ option.hint }}</span>
+        </span>
+      </label>
+    }
+  </fieldset>
+
+  @if (visibility() === 'shared') {
+    <fieldset class="share-friends" [attr.aria-busy]="friendsLoading()">
+      <legend>Amis autorisés</legend>
+      @if (friendsLoading()) {
+        <p class="hint" role="status">Chargement de vos amis…</p>
+      } @else if (friendsError()) {
+        <p class="alert alert-error" role="alert">{{ friendsError() }}</p>
+      } @else if (friends().length === 0) {
+        <div class="share-empty">
+          <p>Vous n’avez encore aucun ami : invitez-en un pour lui partager vos extraits.</p>
+          <a class="btn btn-secondary" routerLink="/friends" [mat-dialog-close]="undefined">Inviter des amis</a>
+        </div>
+      } @else {
+        <ul class="share-friend-list">
+          @for (friend of friends(); track friend.id) {
+            <li>
+              <label class="share-friend">
+                <input
+                  type="checkbox"
+                  [checked]="isSelected(friend.id)"
+                  (change)="toggleFriend(friend.id, $any($event.target).checked); error.set('')"
+                />
+                <span>
+                  <span class="share-friend-name">{{ friend.name }}</span>
+                  <span class="hint">{{ friend.email }}</span>
+                </span>
+              </label>
+            </li>
+          }
+        </ul>
+      }
+    </fieldset>
+  }
+
+  @if (error()) {
+    <p class="alert alert-error share-error" role="alert">{{ error() }}</p>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" class="btn-secondary" [mat-dialog-close]="undefined">Annuler</button>
+  <button type="button" class="btn-primary share-save" [disabled]="saving()" (click)="save()">
+    {{ saving() ? 'Enregistrement…' : 'Enregistrer' }}
+  </button>
+</mat-dialog-actions>

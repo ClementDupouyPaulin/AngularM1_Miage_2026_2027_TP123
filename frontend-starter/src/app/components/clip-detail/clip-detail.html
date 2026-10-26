@@ -1,10 +1,12 @@
-<section class="page">
+<section class="page montage">
   <a class="back-link" routerLink="/clips">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M15.4 6.6 14 5.2 7.2 12l6.8 6.8 1.4-1.4L10 12l5.4-5.4Z" fill="currentColor" />
     </svg>
-    Retour à mes extraits
+    Retour au Studio
   </a>
+
+  <p class="visually-hidden" aria-live="polite" role="status">{{ announcement() }}</p>
 
   @if (loading()) {
     <div class="card" aria-busy="true">
@@ -18,81 +20,250 @@
       <p class="alert alert-error" role="alert">{{ error() }}</p>
     </div>
   } @else if (clip(); as clip) {
-    <header class="hero">
-      <p class="eyebrow">Film Pulse · Extrait</p>
+    <header class="hero montage-hero">
+      <p class="eyebrow">Salle de montage</p>
       <h1>{{ clip.title }}</h1>
       <p class="meta">{{ clip.originalName }} · ajouté le {{ clip.createdAt | date: 'dd/MM/yyyy' }}</p>
+      <ul class="badges" aria-label="Informations de l’extrait">
+        <li><span class="chip" [class.chip-accent]="clip.isOwner" data-testid="owner-badge">{{ ownerBadge() }}</span></li>
+        <li><span class="chip chip-beat" data-testid="visibility-badge">{{ visibilityLabel() }}</span></li>
+        @for (tag of clip.tags; track tag) {
+          <li><span class="chip">#{{ tag }}</span></li>
+        }
+      </ul>
     </header>
 
-    <section class="card player-card" aria-labelledby="player-heading">
-      <h2 id="player-heading">Lecture</h2>
-
-      <div class="video-frame">
-        @if (videoUrl()) {
-          <video
-            #player
-            controls
-            preload="metadata"
-            [src]="videoUrl()"
-            [attr.aria-label]="'Vidéo : ' + clip.title"
-            (timeupdate)="onTimeUpdate()"
-            (seeked)="onTimeUpdate()"
-          ></video>
-        } @else if (videoLoading()) {
-          <div class="video-placeholder skeleton" role="status">
-            <span class="visually-hidden">Chargement de la vidéo…</span>
-          </div>
-        } @else {
-          <div class="video-placeholder">
-            <p class="alert alert-error" role="alert">{{ videoError() }}</p>
-          </div>
-        }
-      </div>
-
-      <div class="controls">
-        <button
-          type="button"
-          class="btn-secondary"
-          [disabled]="previousCutTime() === null && currentTime() === 0"
-          (click)="goToPreviousCut()"
-        >
-          ← Coupe précédente
+    @if (clip.isOwner) {
+      <div class="owner-actions">
+        <button type="button" class="btn-secondary" [attr.aria-expanded]="editing()" aria-controls="meta-form" (click)="editing() ? cancelEditing() : startEditing()">
+          Modifier le titre et les étiquettes
         </button>
-        <p class="position" aria-live="off">
-          <span class="position-time">{{ currentTimeLabel() }}</span>
-          <span class="position-shot">Plan {{ currentShot() }} / {{ clip.cutCount + 1 }}</span>
-        </p>
-        <button type="button" class="btn-secondary" [disabled]="nextCutTime() === null" (click)="goToNextCut()">
-          Coupe suivante →
+        <button type="button" class="btn-primary share-button" (click)="openShare()">Partager</button>
+        <button type="button" class="btn-danger delete-button" [disabled]="deleting()" (click)="confirmDelete()">
+          {{ deleting() ? 'Suppression…' : 'Supprimer' }}
         </button>
       </div>
-    </section>
-
-    <section class="card" aria-labelledby="pulse-heading">
-      <h2 id="pulse-heading">Pouls du montage</h2>
-      <p class="hint">
-        Cliquez sur la courbe ou sur un pic pour sauter à l’instant correspondant ; au clavier, les flèches
-        avancent ou reculent d’une seconde.
-      </p>
-      <app-pulse-timeline
-        [analysis]="clip.analysis"
-        [currentTime]="currentTime()"
-        [label]="'Pouls du montage de « ' + clip.title + ' »'"
-        (seek)="seekTo($event)"
-      />
-    </section>
-
-    <section aria-labelledby="stats-heading">
-      <h2 id="stats-heading" class="visually-hidden">Statistiques</h2>
-      <dl class="stats">
-        @for (stat of stats(); track stat.label) {
-          <div class="card stat">
-            <dt>{{ stat.label }}</dt>
-            <dd class="stat-value">{{ stat.value }}</dd>
-            <dd class="stat-hint">{{ stat.hint }}</dd>
+      @if (actionError()) {
+        <p class="alert alert-error" role="alert">{{ actionError() }}</p>
+      }
+      @if (editing()) {
+        <form id="meta-form" class="card meta-form" [formGroup]="metaForm" (ngSubmit)="saveMetadata()" novalidate>
+          <h2>Titre et étiquettes</h2>
+          <div class="field">
+            <label for="meta-title">Titre</label>
+            <input
+              id="meta-title"
+              type="text"
+              formControlName="title"
+              [attr.maxlength]="titleMaxLength"
+              [attr.aria-invalid]="metaForm.controls.title.invalid && metaForm.controls.title.touched"
+            />
           </div>
-        }
-      </dl>
-    </section>
+          <div class="field">
+            <label for="meta-tags">Étiquettes</label>
+            <input id="meta-tags" type="text" formControlName="tags" aria-describedby="meta-tags-hint" />
+            <p id="meta-tags-hint" class="hint">Séparées par des virgules, 5 au plus, 24 caractères chacune.</p>
+          </div>
+          @if (metaError()) {
+            <p class="field-error" role="alert">{{ metaError() }}</p>
+          }
+          <div class="form-actions">
+            <button type="button" class="btn-ghost" (click)="cancelEditing()">Annuler</button>
+            <button type="submit" class="btn-primary" [disabled]="metaSaving()">
+              {{ metaSaving() ? 'Enregistrement…' : 'Enregistrer' }}
+            </button>
+          </div>
+        </form>
+      }
+    }
+
+    @if (analysis(); as analysis) {
+      <div class="workspace">
+        <section class="card player-card" aria-labelledby="player-heading">
+          <h2 id="player-heading" class="visually-hidden">Lecture</h2>
+          @if (videoUrl()) {
+            <app-video-player
+              [src]="videoUrl()"
+              [label]="clip.title"
+              [cuts]="analysis.cuts"
+              [durationSec]="analysis.durationSec"
+              (timeChange)="onPlayerTime($event)"
+            />
+          } @else if (videoLoading()) {
+            <div class="video-placeholder skeleton" role="status">
+              <span class="visually-hidden">Chargement de la vidéo…</span>
+            </div>
+          } @else {
+            <div class="video-placeholder">
+              <p class="alert alert-error" role="alert">{{ videoError() }}</p>
+            </div>
+          }
+        </section>
+
+        <aside class="side">
+          <section class="card analysis-panel" aria-labelledby="analysis-heading">
+            <h2 id="analysis-heading">Sensibilité de détection</h2>
+            @if (canRedetect()) {
+              <div class="field">
+                <label for="sensitivity">Coefficient k : <span class="timecode">{{ sensitivityLabel() }}</span></label>
+                <input
+                  id="sensitivity"
+                  type="range"
+                  [min]="minK"
+                  [max]="maxK"
+                  [step]="sensitivityStep"
+                  [value]="sensitivity()"
+                  aria-describedby="sensitivity-hint"
+                  [attr.aria-valuetext]="'k = ' + sensitivityLabel() + ', ' + analysis.cuts.length + ' coupes'"
+                  (input)="onSensitivityInput($any($event.target).value)"
+                />
+                <p id="sensitivity-hint" class="hint">
+                  Plus k est bas, plus de coupes sont détectées. L’aperçu se met à jour sans relire la vidéo.
+                </p>
+              </div>
+              <p class="preview-status" role="status">
+                {{ analysis.cuts.length }} coupes, {{ fadeCount() }} fondus
+                @if (dirty()) { <span class="chip chip-accent">aperçu non enregistré</span> }
+              </p>
+              <div class="form-actions">
+                <button type="button" class="btn-ghost" [disabled]="!dirty()" (click)="resetAnalysis()">Réinitialiser</button>
+                @if (clip.isOwner) {
+                  <button type="button" class="btn-primary save-analysis" [disabled]="!dirty() || savingAnalysis()" (click)="saveAnalysis()">
+                    {{ savingAnalysis() ? 'Enregistrement…' : 'Enregistrer' }}
+                  </button>
+                }
+              </div>
+              @if (!clip.isOwner) {
+                <p class="hint">Exploration locale : seul le propriétaire peut enregistrer un réglage.</p>
+              }
+              @if (analysisMessage()) {
+                <p class="hint analysis-message" role="status">{{ analysisMessage() }}</p>
+              }
+            } @else {
+              <p class="hint">Cette analyse ne contient pas les mesures d’images nécessaires au réglage.</p>
+            }
+          </section>
+
+          <section class="card annotations" aria-labelledby="annotations-heading">
+            <h2 id="annotations-heading">Annotations</h2>
+            <form class="annotation-form" (submit)="$event.preventDefault(); addAnnotation()" novalidate>
+              <label for="annotation-text">
+                Note à <span class="timecode">{{ draftTimeLabel() }}</span>
+                @if (annotationDraftTime() !== null) {
+                  <span class="hint">(instant choisi sur la timeline)</span>
+                }
+              </label>
+              <textarea
+                #annotationInput
+                id="annotation-text"
+                rows="2"
+                [formControl]="annotationText"
+                [attr.maxlength]="annotationMaxLength"
+                aria-describedby="annotation-count"
+              ></textarea>
+              <p id="annotation-count" class="hint">{{ annotationLength() }} / {{ annotationMaxLength }} caractères</p>
+              @if (annotationError()) {
+                <p class="field-error" role="alert">{{ annotationError() }}</p>
+              }
+              <div class="form-actions">
+                @if (annotationDraftTime() !== null) {
+                  <button type="button" class="btn-ghost" (click)="useCurrentTime()">Utiliser le temps courant</button>
+                }
+                <button type="submit" class="btn-primary add-annotation" [disabled]="annotationSaving()">Ajouter</button>
+              </div>
+            </form>
+
+            @if (sortedAnnotations().length === 0) {
+              <p class="hint empty-annotations">Aucune annotation. Maj+clic ou « N » sur la timeline choisit l’instant.</p>
+            } @else {
+              <ol class="annotation-list">
+                @for (annotation of sortedAnnotations(); track annotation.id) {
+                  <li class="annotation">
+                    <button
+                      type="button"
+                      class="btn-ghost annotation-jump"
+                      [attr.aria-label]="'Aller à ' + formatTimecode(annotation.time, true) + ' : ' + annotation.text"
+                      (click)="seekTo(annotation.time)"
+                    >
+                      <span class="timecode annotation-time">{{ formatTimecode(annotation.time, true) }}</span>
+                      <span class="annotation-body">
+                        <span class="annotation-text">{{ annotation.text }}</span>
+                        <span class="hint">{{ annotation.authorName }}</span>
+                      </span>
+                    </button>
+                    @if (canDeleteAnnotation(annotation)) {
+                      <button
+                        type="button"
+                        class="btn-ghost btn-icon remove-annotation"
+                        [attr.aria-label]="'Supprimer l’annotation de ' + formatTimecode(annotation.time, true)"
+                        (click)="removeAnnotation(annotation)"
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 7h12l-1 13H7zm3-3h6l1 2h4v2H4V6h4z" fill="currentColor" /></svg>
+                      </button>
+                    }
+                  </li>
+                }
+              </ol>
+            }
+          </section>
+        </aside>
+
+        <section class="card timeline-card" aria-labelledby="pulse-heading">
+          <h2 id="pulse-heading">Pouls du montage</h2>
+          <p class="hint">
+            Cliquez pour sauter à un instant ; Maj+clic, double-clic ou « N » pour annoter cet instant.
+          </p>
+          <app-pulse-timeline
+            [analysis]="analysis"
+            [currentTime]="currentTime()"
+            [annotations]="clip.annotations"
+            [filmstripUrl]="filmstripUrl()"
+            [label]="'Pouls du montage de « ' + clip.title + ' »'"
+            (seek)="seekTo($event)"
+            (annotateAt)="onAnnotateAt($event)"
+          />
+          <app-filmstrip [url]="filmstripUrl()" [analysis]="analysis" [currentTime]="currentTime()" (seek)="seekTo($event)" />
+          <app-palette-band
+            [palette]="analysis.palette"
+            [durationSec]="analysis.durationSec"
+            [currentTime]="currentTime()"
+            (seek)="seekTo($event)"
+          />
+        </section>
+      </div>
+
+      <section aria-labelledby="stats-heading">
+        <h2 id="stats-heading" class="section-title">Mesures</h2>
+        <dl class="stats">
+          @for (stat of stats(); track stat.label) {
+            <div class="card stat-card">
+              <dt class="stat-label">{{ stat.label }}</dt>
+              <dd class="stat-value">{{ stat.value }}</dd>
+              <dd class="hint">{{ stat.hint }}</dd>
+            </div>
+          }
+        </dl>
+      </section>
+
+      <div class="charts">
+        <section class="card" aria-labelledby="histogram-heading">
+          <h2 id="histogram-heading">Durées des plans</h2>
+          <app-shot-histogram [cuts]="analysis.cuts" [durationSec]="analysis.durationSec" [label]="clip.title" />
+        </section>
+        <section class="card" aria-labelledby="acceleration-heading">
+          <h2 id="acceleration-heading">Accélération du montage</h2>
+          <app-acceleration-chart [cuts]="analysis.cuts" [durationSec]="analysis.durationSec" [label]="clip.title" />
+        </section>
+      </div>
+
+      <section class="card export" aria-labelledby="export-heading">
+        <h2 id="export-heading">Exporter</h2>
+        <div class="form-actions">
+          <button type="button" class="btn-secondary export-png" (click)="exportPng()">Image du pouls (PNG)</button>
+          <button type="button" class="btn-secondary export-json" (click)="exportJson()">Données (JSON)</button>
+        </div>
+        <p class="hint" role="status">{{ exportMessage() }}</p>
+      </section>
+    }
   }
 </section>
