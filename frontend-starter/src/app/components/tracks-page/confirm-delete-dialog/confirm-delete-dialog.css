@@ -7,7 +7,7 @@
   --mat-dialog-container-color: var(--surface);
   --mat-dialog-subhead-color: var(--text);
   --mat-dialog-supporting-text-color: var(--text);
-  --mat-dialog-container-shape: var(--radius-md);
+  --mat-dialog-container-shape: var(--radius-lg);
 }
 
 .track-confirm-dialog p { margin: 0; overflow-wrap: anywhere; }
@@ -16,6 +16,10 @@
 
 .track-confirm-dialog button { min-height: 2.75rem; min-width: 2.75rem; }
 
-/* `--surface` est blanc en clair et très sombre en sombre : contraste AA
-   garanti sur `--danger` dans les deux thèmes (le blanc fixe ne l'est pas). */
-.track-confirm-dialog .confirm { color: var(--surface); background: var(--danger); }
+/* `--on-danger` est choisi par thème pour garantir le contraste AA sur `--danger`. */
+.track-confirm-dialog .confirm { color: var(--on-danger); background: var(--danger); }
+.track-confirm-dialog .confirm:hover:not(:disabled) { color: var(--on-danger); }
+
+/* Liseré « coupe » rouge en tête du dialogue destructif. */
+.track-confirm-dialog .mat-mdc-dialog-surface { border-top: 3px solid var(--rec); }
+.track-confirm-dialog strong { color: var(--text); }

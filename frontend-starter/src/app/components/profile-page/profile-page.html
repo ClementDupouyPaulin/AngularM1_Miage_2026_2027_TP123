@@ -1,7 +1,10 @@
 <section class="profile" aria-labelledby="profile-title">
-  <div class="page-head">
-    <h1 id="profile-title">Mon profil</h1>
-    <button type="button" class="btn-secondary" (click)="load()" [disabled]="loading()">
+  <div class="page-header">
+    <div>
+      <p class="eyebrow">Générique · Fiche</p>
+      <h1 id="profile-title">Mon profil</h1>
+    </div>
+    <button type="button" class="btn btn-secondary" (click)="load()" [disabled]="loading()">
       {{ loading() ? 'Chargement…' : 'Recharger mon profil' }}
     </button>
   </div>
@@ -16,18 +19,23 @@
   }
 
   @if (auth.currentUser(); as user) {
-    <div class="card identity">
+    <div class="banner identity">
+      <svg class="ecg identity-ecg" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path class="ecg-base" d="M0 20h240" />
+        <path pathLength="100" d="M0 20h80l6-8 6 16 7-28 7 34 5-14h40l5-6 5 6h73" />
+      </svg>
       <div class="avatar" aria-hidden="true" data-testid="profile-avatar">{{ initials() }}</div>
       <div class="identity-text">
         <b class="identity-name" data-testid="profile-name">{{ user.name }}</b>
         <span class="identity-email">{{ user.email }}</span>
-        <span class="hint">
+        <span class="member-since">
+          <span class="chip chip-accent">Au générique</span>
           Membre depuis <time [attr.datetime]="user.createdAt">{{ memberSince() }}</time>
         </span>
       </div>
     </div>
 
-    <form class="card" [formGroup]="form" (ngSubmit)="save()" [attr.aria-busy]="saving()" novalidate>
+    <form class="card perf" [formGroup]="form" (ngSubmit)="save()" [attr.aria-busy]="saving()" novalidate>
       <h2>Modifier mon nom</h2>
       <div class="field">
         <label for="profile-name-input">Nouveau nom</label>
@@ -51,7 +59,7 @@
           </p>
         }
       </div>
-      <button type="submit" class="submit" [disabled]="!canSave() || saving()">
+      <button type="submit" class="btn btn-primary submit" [disabled]="!canSave() || saving()">
         @if (saving()) {
           <span class="spinner" aria-hidden="true"></span>
         }

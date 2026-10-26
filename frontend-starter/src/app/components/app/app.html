@@ -2,23 +2,54 @@
   Aller au contenu principal
 </a>
 
-<header>
-  <a class="brand" routerLink="/">
-    <svg class="brand-logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">
-      <path fill="currentColor" d="M12 2c5 0 8 3 8 7 0 6-5 13-8 13S4 15 4 9c0-4 3-7 8-7z" />
+<header class="app-header">
+  <a class="brand" routerLink="/" aria-label="Film Pulse, accueil">
+    <svg class="brand-logo" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true" focusable="false">
+      <path class="clap-top" d="M3 9.5 27.6 3l1.1 4.1L4.1 13.6z" />
+      <path class="clap-stripes" d="m8.2 8.1 2.5 3.7m3.6-5.3 2.5 3.7m3.6-5.3 2.5 3.7" />
+      <rect class="clap-body" x="3.5" y="14" width="25" height="15" rx="2" />
+      <path class="clap-pulse" d="M6.5 22h5l1.8-4 2.6 7.5 2.2-5.5 1.4 2H25.5" />
     </svg>
     <span class="brand-text">
-      <b>Guitar Practice Cloud</b>
-      <small>Le cloud qui manque à votre ampli</small>
+      <b>Film Pulse</b>
+      <svg class="ecg brand-ecg" viewBox="0 0 120 16" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path class="ecg-base" d="M0 8h120" />
+        <path pathLength="100" d="M0 8h34l4-5 5 10 4-13 4 14 3-6h24l3-3 3 3h36" />
+      </svg>
     </span>
   </a>
 
-  <nav aria-label="Navigation principale">
+  @if (auth.token()) {
+    <button
+      type="button"
+      class="btn btn-ghost btn-icon menu-toggle"
+      aria-controls="main-nav"
+      [attr.aria-expanded]="menuOpen()"
+      [attr.aria-label]="menuOpen() ? 'Fermer le menu' : 'Ouvrir le menu'"
+      (click)="toggleMenu()"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        @if (menuOpen()) {
+          <path d="M6 6l12 12M18 6 6 18" />
+        } @else {
+          <path d="M4 7h16M4 12h16M4 17h16" />
+        }
+      </svg>
+    </button>
+  }
+
+  <nav
+    id="main-nav"
+    class="main-nav"
+    [class.collapsible]="auth.token()"
+    [class.open]="menuOpen()"
+    aria-label="Navigation principale"
+  >
     @if (auth.token()) {
-      <a routerLink="/tracks" routerLinkActive="active" ariaCurrentWhenActive="page">
-        Backing tracks
-      </a>
-      <a routerLink="/clips" routerLinkActive="active" ariaCurrentWhenActive="page">Film Pulse</a>
+      <a routerLink="/clips" routerLinkActive="active" ariaCurrentWhenActive="page">Studio</a>
+      <a routerLink="/discover" routerLinkActive="active" ariaCurrentWhenActive="page">Découvrir</a>
+      <a routerLink="/friends" routerLinkActive="active" ariaCurrentWhenActive="page">Amis</a>
+      <a routerLink="/tracks" routerLinkActive="active" ariaCurrentWhenActive="page">Bandes-son</a>
       <a routerLink="/profile" routerLinkActive="active" ariaCurrentWhenActive="page">Profil</a>
     } @else {
       <a routerLink="/login" routerLinkActive="active" ariaCurrentWhenActive="page">Connexion</a>
@@ -28,16 +59,47 @@
     }
   </nav>
 
-  @if (auth.token()) {
-    <div class="account">
-      @if (auth.currentUser(); as user) {
-        <span class="account-name" data-testid="header-user-name">{{ user.name }}</span>
-      }
-      <button type="button" class="logout" data-testid="logout-button" (click)="logout()">
-        Déconnexion
-      </button>
-    </div>
-  }
+  <div class="tools">
+    <button
+      type="button"
+      class="btn btn-ghost btn-icon theme-toggle"
+      data-testid="theme-toggle"
+      [attr.aria-label]="themeLabel()"
+      [title]="themeLabel()"
+      (click)="cycleTheme()"
+    >
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        @switch (theme()) {
+          @case ('dark') {
+            <path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" />
+          }
+          @case ('light') {
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          }
+          @default {
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" />
+          }
+        }
+      </svg>
+    </button>
+
+    @if (auth.token()) {
+      <div class="account">
+        <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+        @if (auth.currentUser(); as user) {
+          <span class="account-name" data-testid="header-user-name">{{ user.name }}</span>
+        }
+        <button type="button" class="btn btn-ghost logout" data-testid="logout-button" (click)="logout()">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+          </svg>
+          <span class="logout-text">Déconnexion</span>
+        </button>
+      </div>
+    }
+  </div>
 </header>
 
 <main id="contenu" tabindex="-1" #main>

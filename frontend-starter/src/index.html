@@ -2,8 +2,23 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <title>Guitar Practice Cloud</title>
+    <title>Film Pulse</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Film Pulse : analysez le rythme de montage de vos extraits vidéo, comparez-les et partagez-les depuis votre salle de montage en ligne."
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0b0c10" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)" />
+    <script>
+      try {
+        var theme = localStorage.getItem('film-pulse-theme');
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <app-root></app-root>

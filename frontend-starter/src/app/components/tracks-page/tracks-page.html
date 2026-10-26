@@ -1,11 +1,19 @@
 <section class="page">
-  <div class="hero">
+  <div class="hero tracks-hero">
+    <div class="hero-top" aria-hidden="true">
+      <span class="chip chip-beat">Piste son</span>
+      <span class="timecode hero-tc">00:00:00:00</span>
+    </div>
     <p class="eyebrow">Ma bibliothèque</p>
-    <h1>Backing tracks</h1>
-    <p>Importez, retrouvez et écoutez vos morceaux de travail.</p>
+    <h1>Bandes-son</h1>
+    <p>Importez, retrouvez et écoutez les musiques de vos montages.</p>
+    <svg class="ecg hero-wave" viewBox="0 0 240 30" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <path class="ecg-base" d="M0 15h240" />
+      <path pathLength="100" d="M0 15h20l3-6 3 12 3-9 3 6 3-3h18l3-10 3 20 3-14 3 8h30l3-5 3 10 3-12 3 9h25l3-7 3 14 3-10 3 3h60" />
+    </svg>
   </div>
 
-  <section class="card upload-card" aria-labelledby="upload-heading">
+  <section class="card perf upload-card" aria-labelledby="upload-heading">
     <h2 id="upload-heading">Importer un morceau</h2>
 
     <div class="upload-layout">
@@ -107,7 +115,7 @@
 
         <button
           type="button"
-          class="send"
+          class="btn btn-primary send"
           (click)="upload()"
           [disabled]="!canUpload()"
           [attr.aria-busy]="uploading()"
@@ -272,7 +280,7 @@
             <div class="track-actions">
               <button
                 type="button"
-                class="play"
+                class="btn btn-primary play"
                 (click)="play(track)"
                 [disabled]="audioLoadingId() === track.id || deletingId() === track.id"
                 [attr.aria-busy]="audioLoadingId() === track.id"
@@ -287,7 +295,7 @@
               </button>
               <button
                 type="button"
-                class="delete"
+                class="btn btn-secondary delete"
                 (click)="remove(track)"
                 [disabled]="deletingId() === track.id || coverBusyId() === track.id"
                 [attr.aria-busy]="deletingId() === track.id"

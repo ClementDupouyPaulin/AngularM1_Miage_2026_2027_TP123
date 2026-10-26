@@ -3,7 +3,7 @@ import { provideRouter, Router, Routes } from '@angular/router';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, of, throwError } from 'rxjs';
-import { AppComponent } from './app';
+import { AppComponent, THEME_STORAGE_KEY } from './app';
 import { AuthService } from '../../shared/services/auth.service';
 import { User } from '../../shared/models/user.model';
 
@@ -127,6 +127,92 @@ describe('AppComponent', () => {
     );
 
     expect(name?.textContent).toContain('Demo User');
+  });
+
+  it('affiche la navigation du studio en session', () => {
+    const { fixture } = setup('fake-jwt-token', DEMO_USER);
+    const links = Array.from<HTMLAnchorElement>(fixture.nativeElement.querySelectorAll('nav a'));
+
+    expect(links.map((link) => link.getAttribute('href'))).toEqual([
+      '/clips',
+      '/discover',
+      '/friends',
+      '/tracks',
+      '/profile',
+    ]);
+    expect(links.map((link) => link.textContent?.trim())).toEqual([
+      'Studio',
+      'Découvrir',
+      'Amis',
+      'Bandes-son',
+      'Profil',
+    ]);
+  });
+
+  it('ouvre et referme le menu replié avec aria-expanded', () => {
+    const { fixture } = setup('fake-jwt-token', DEMO_USER);
+    const toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.menu-toggle');
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelector('nav.open')).toBeTruthy();
+  });
+
+  describe('sélecteur de thème', () => {
+    afterEach(() => {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+      document.documentElement.removeAttribute('data-theme');
+    });
+
+    function themeButton(fixture: { nativeElement: HTMLElement }): HTMLButtonElement {
+      return fixture.nativeElement.querySelector('[data-testid="theme-toggle"]')!;
+    }
+
+    it('applique le thème mémorisé au démarrage', () => {
+      localStorage.setItem(THEME_STORAGE_KEY, 'light');
+      setup(null);
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+    });
+
+    it('fait tourner auto → sombre → clair → auto et persiste le choix', () => {
+      const { fixture } = setup(null);
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+
+      themeButton(fixture).click();
+      fixture.detectChanges();
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('dark');
+      expect(themeButton(fixture).getAttribute('aria-label')).toContain('Thème sombre');
+
+      themeButton(fixture).click();
+      expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+
+      themeButton(fixture).click();
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+      expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+    });
+
+    it('reste utilisable quand le stockage est indisponible', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const unavailable = () => {
+        throw new Error('SecurityError');
+      };
+      vi.stubGlobal('localStorage', {
+        getItem: unavailable,
+        setItem: unavailable,
+        removeItem: unavailable,
+      });
+
+      const { fixture } = setup(null);
+      themeButton(fixture).click();
+
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      expect(warn).toHaveBeenCalledTimes(2);
+      vi.unstubAllGlobals();
+      warn.mockRestore();
+    });
   });
 
   describe('restauration du profil après un rafraîchissement', () => {
