@@ -1,0 +1,329 @@
+<section class="page">
+  <div class="hero">
+    <p class="eyebrow">Film Pulse</p>
+    <h1>Mes extraits</h1>
+    <p>Analysez le rythme de montage d’un extrait de film, puis retrouvez-le dans votre liste.</p>
+  </div>
+
+  <section class="card upload-card" aria-labelledby="upload-heading">
+    <h2 id="upload-heading">Analyser un extrait</h2>
+
+    <ol class="steps" aria-label="Étapes">
+      <li [class.done]="file() !== undefined && !fileError()">Choisir</li>
+      <li [class.active]="analyzing()" [class.done]="analysis() !== null">Analyser</li>
+      <li [class.active]="uploading()">Envoyer</li>
+    </ol>
+
+    <div class="upload-layout">
+      <div
+        class="dropzone"
+        [class.dragging]="dragging()"
+        [class.has-file]="file() !== undefined"
+        [class.disabled]="busy()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave()"
+        (drop)="onDrop($event)"
+      >
+        <input
+          id="clip-file"
+          #fileInput
+          class="visually-hidden"
+          type="file"
+          [accept]="acceptAttribute"
+          [attr.aria-describedby]="fileError() ? 'file-hint file-error' : 'file-hint'"
+          [attr.aria-invalid]="fileError() ? 'true' : null"
+          [disabled]="busy()"
+          (change)="choose($event)"
+        />
+        <label for="clip-file" class="dropzone-label">
+          <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path
+              d="M4 5h11a1 1 0 0 1 1 1v3.5l4-2.5v10l-4-2.5V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"
+              fill="currentColor"
+            />
+          </svg>
+          <span class="dropzone-title">
+            Glissez une vidéo ici ou <span class="dropzone-link">parcourez vos fichiers</span>
+          </span>
+          <span class="hint" id="file-hint">
+            MP4 ou WebM — {{ maxFileSizeLabel }} et {{ maxDurationSec }} secondes maximum.
+          </span>
+        </label>
+
+        @if (file(); as selected) {
+          <p class="file-chip">
+            <span class="visually-hidden">Fichier sélectionné :</span>
+            <span class="file-name">{{ selected.name }}</span>
+            <span class="badge">{{ formatSize(selected.size) }}</span>
+          </p>
+        }
+        @if (fileError()) {
+          <p class="field-error" id="file-error" role="alert">{{ fileError() }}</p>
+        }
+      </div>
+
+      <div class="upload-fields">
+        <label for="clip-title">
+          Titre
+          <input
+            id="clip-title"
+            [formControl]="title"
+            [attr.maxlength]="titleMaxLength"
+            autocomplete="off"
+            aria-describedby="title-hint"
+          />
+        </label>
+        <p class="hint" id="title-hint">
+          {{ titleMaxLength }} caractères maximum. Laissé vide, le nom du fichier est utilisé.
+        </p>
+
+        <div class="actions">
+          @if (analyzing()) {
+            <button type="button" class="btn-secondary cancel" (click)="cancelAnalysis()">
+              Annuler l’analyse
+            </button>
+          } @else {
+            <button type="button" class="analyze" (click)="analyze()" [disabled]="!canAnalyze()">
+              Analyser
+            </button>
+          }
+          <button
+            type="button"
+            class="send"
+            (click)="upload()"
+            [disabled]="!canUpload()"
+            [attr.aria-busy]="uploading()"
+          >
+            {{ uploading() ? 'Envoi en cours…' : 'Envoyer' }}
+          </button>
+        </div>
+
+        @if (analyzing()) {
+          <div class="progress-zone">
+            <progress
+              class="progress analysis-progress"
+              max="100"
+              [value]="analysisProgress()"
+              aria-label="Progression de l’analyse"
+            ></progress>
+            <p class="hint">Analyse en cours : {{ analysisProgress() }} %</p>
+          </div>
+        }
+
+        @if (uploading()) {
+          <div class="progress-zone">
+            @if (uploadProgress() !== null) {
+              <progress
+                class="progress upload-progress"
+                max="100"
+                [value]="uploadProgress()"
+                aria-label="Progression de l’envoi"
+              ></progress>
+              <p class="hint">{{ uploadProgress() }} % des octets transmis</p>
+            } @else {
+              <progress class="progress upload-progress" aria-label="Progression de l’envoi"></progress>
+              <p class="hint">Envoi en cours…</p>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    @if (analysis(); as result) {
+      <section class="result" aria-labelledby="result-heading">
+        <h3 id="result-heading" #resultHeading tabindex="-1">Résultat de l’analyse</h3>
+        <dl class="stats">
+          <div class="stat">
+            <dt>Coupes</dt>
+            <dd class="stat-cuts">{{ cutCount() }}</dd>
+          </div>
+          <div class="stat">
+            <dt>Plan moyen</dt>
+            <dd class="stat-asl">{{ formatDecimal(avgShot(), 1) }} s</dd>
+          </div>
+          <div class="stat">
+            <dt>Beats</dt>
+            <dd class="stat-beats">{{ beatCount() }}</dd>
+          </div>
+          <div class="stat">
+            <dt>Synchro</dt>
+            <dd class="stat-sync">
+              @if (result.syncScore !== null) {
+                <span class="score">{{ formatDecimal(result.syncScore, 2) }}</span>
+              } @else {
+                <span class="score">—</span>
+              }
+              <span class="sync-label">{{ syncLabel() }}</span>
+            </dd>
+          </div>
+        </dl>
+        <p class="hint">Durée analysée : {{ formatDuration(result.durationSec) }}</p>
+      </section>
+    }
+
+    <p class="status" role="status" aria-live="polite">
+      @if (analyzing()) {
+        Analyse de la vidéo en cours…
+      } @else if (uploading()) {
+        Envoi de l’extrait en cours, merci de patienter…
+      } @else if (analysisNotice()) {
+        <span class="notice">{{ analysisNotice() }}</span>
+      }
+    </p>
+
+    @if (analysisError()) {
+      <p class="alert alert-error analysis-error" role="alert">{{ analysisError() }}</p>
+    }
+    @if (uploadError()) {
+      <p class="alert alert-error upload-error" role="alert">{{ uploadError() }}</p>
+    }
+  </section>
+
+  <section class="card library" aria-labelledby="list-heading">
+    <div class="library-header">
+      <h2 id="list-heading" #listHeading tabindex="-1">Extraits enregistrés</h2>
+      <button type="button" class="btn-secondary refresh" (click)="load()" [disabled]="loading()">
+        Actualiser
+      </button>
+    </div>
+
+    <div class="search" role="search" aria-label="Filtrer mes extraits">
+      <label for="clip-search" class="search-label">Filtrer par titre</label>
+      <div class="search-field">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path
+            d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
+            fill="currentColor"
+          />
+        </svg>
+        <input
+          id="clip-search"
+          #searchInput
+          type="search"
+          [formControl]="search"
+          [attr.maxlength]="searchMaxLength"
+          placeholder="Ex. : poursuite"
+          autocomplete="off"
+        />
+        @if (searchText() || query()) {
+          <button type="button" class="btn-secondary clear" (click)="clearSearch()" aria-label="Effacer le filtre">
+            Effacer
+          </button>
+        }
+      </div>
+    </div>
+
+    <p class="status" role="status" aria-live="polite">
+      @if (loading()) {
+        Chargement de la page {{ page() }}…
+      } @else {
+        {{ resultsAnnouncement() }}
+      }
+    </p>
+
+    @if (error()) {
+      <p class="alert alert-error list-error" role="alert">{{ error() }}</p>
+    }
+
+    @if (loading() && clips().length === 0) {
+      <ul class="clips" aria-hidden="true">
+        @for (index of skeletons(); track index) {
+          <li class="clip-card skeleton-card">
+            <div class="skeleton skeleton-line wide"></div>
+            <div class="skeleton skeleton-line"></div>
+            <div class="skeleton skeleton-block"></div>
+          </li>
+        }
+      </ul>
+    } @else if (clips().length > 0) {
+      <ul class="clips" [class.stale]="loading()" [attr.aria-busy]="loading()" aria-label="Liste de mes extraits">
+        @for (clip of clips(); track clip.id) {
+          <li class="clip-card">
+            <div class="clip-head">
+              <h3 class="clip-title">{{ clip.title }}</h3>
+              <span class="badge">
+                <span class="visually-hidden">Durée : </span>{{ formatDuration(clip.durationSec) }}
+              </span>
+            </div>
+
+            <dl class="clip-stats">
+              <div>
+                <dt>Coupes</dt>
+                <dd>{{ clip.cutCount }}</dd>
+              </div>
+              <div>
+                <dt>Plan moyen</dt>
+                <dd>{{ formatDecimal(clip.avgShotLength, 1) }} s</dd>
+              </div>
+              <div>
+                <dt>Synchro</dt>
+                <dd>
+                  {{ clip.syncScore !== null ? formatDecimal(clip.syncScore, 2) : '—' }}
+                </dd>
+              </div>
+            </dl>
+            <p class="meta">
+              <span class="sync-chip" [class.aligned]="syncScoreLabel(clip.syncScore) === 'calé sur la musique'">
+                {{ syncScoreLabel(clip.syncScore) }}
+              </span>
+              <time [attr.datetime]="clip.createdAt">{{ clip.createdAt | date: 'dd/MM/yyyy HH:mm' }}</time>
+            </p>
+
+            <div class="clip-actions">
+              <a class="pulse-link" [routerLink]="['/clips', clip.id]" [attr.aria-label]="'Voir le pouls de ' + clip.title">
+                Voir le pouls
+              </a>
+              <button
+                type="button"
+                class="delete"
+                (click)="remove(clip)"
+                [disabled]="deletingId() === clip.id"
+                [attr.aria-busy]="deletingId() === clip.id"
+                [attr.aria-label]="'Supprimer ' + clip.title"
+              >
+                {{ deletingId() === clip.id ? 'Suppression…' : 'Supprimer' }}
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    } @else if (!loading() && !error()) {
+      @if (query()) {
+        <div class="empty empty-search">
+          <p class="empty-title">Aucun extrait ne correspond à « {{ query() }} ».</p>
+          <p class="hint">Vérifiez l’orthographe ou essayez un mot plus court.</p>
+          <button type="button" class="btn-secondary" (click)="clearSearch()">Effacer le filtre</button>
+        </div>
+      } @else if (total() === 0) {
+        <div class="empty empty-list">
+          <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M2 12h4l2-6 4 12 3-9 2 3h5v2h-6l-1-1.5-3 9-4-12-1 3.5H2v-1Z" fill="currentColor" />
+          </svg>
+          <p class="empty-title">Aucun extrait pour l’instant.</p>
+          <p class="hint">Analysez votre première vidéo avec le formulaire ci-dessus.</p>
+        </div>
+      } @else {
+        <div class="empty empty-page">
+          <p class="empty-title">Cette page ne contient plus d’extrait.</p>
+          <button type="button" class="btn-secondary" (click)="backToFirstPage()">
+            Revenir à la première page
+          </button>
+        </div>
+      }
+    }
+
+    @if (total() > 0) {
+      <mat-paginator
+        class="paginator"
+        [length]="total()"
+        [pageIndex]="page() - 1"
+        [pageSize]="limit()"
+        [pageSizeOptions]="pageSizeOptions"
+        [showFirstLastButtons]="true"
+        [disabled]="loading()"
+        (page)="onPage($event)"
+        aria-label="Pagination des extraits"
+      />
+    }
+  </section>
+</section>

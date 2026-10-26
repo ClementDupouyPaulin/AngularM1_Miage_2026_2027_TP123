@@ -1,3 +1,9 @@
+/**
+ * Au-delà de ce score, les coupes tombent nettement plus souvent sur un beat
+ * que le hasard (≈ 1) : le montage est considéré calé sur la musique.
+ */
+export const SYNC_ALIGNED_THRESHOLD = 1.25;
+
 /** Score maximal : évite l'infini quand la part attendue au hasard est quasi nulle. */
 export const MAX_SYNC_SCORE = 10;
 

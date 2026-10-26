@@ -19,6 +19,27 @@
       Retirer
     </button>
   </mat-dialog-actions>
+} @else if (data.target === 'clip') {
+  <h2 mat-dialog-title>Supprimer cet extrait ?</h2>
+
+  <mat-dialog-content id="confirm-delete-description">
+    <p>
+      « <strong>{{ data.title }}</strong> » et son analyse seront définitivement supprimés.
+      Cette action est irréversible.
+    </p>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button type="button" class="btn-secondary" [mat-dialog-close]="false">Annuler</button>
+    <button
+      type="button"
+      class="btn-danger confirm"
+      [mat-dialog-close]="true"
+      [aria-label]="'Supprimer définitivement ' + data.title"
+    >
+      Supprimer
+    </button>
+  </mat-dialog-actions>
 } @else {
   <h2 mat-dialog-title>Supprimer cette piste ?</h2>
 

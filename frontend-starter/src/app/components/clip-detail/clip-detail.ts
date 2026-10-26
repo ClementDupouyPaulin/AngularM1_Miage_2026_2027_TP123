@@ -12,12 +12,11 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { EMPTY, catchError, switchMap, tap } from 'rxjs';
+import { SYNC_ALIGNED_THRESHOLD } from '../../shared/analysis/sync-score';
 import { Clip } from '../../shared/models/clip.model';
 import { ClipService } from '../../shared/services/clip.service';
 import { PulseTimelineComponent, formatPreciseTime, formatTime } from '../pulse-timeline/pulse-timeline';
 
-/** Au-delà, les coupes tombent nettement plus souvent sur un beat que par hasard. */
-export const SYNC_ALIGNED_THRESHOLD = 1.2;
 /**
  * Marge de « Coupe précédente » : pendant la lecture, juste après une coupe,
  * un nouvel appui doit remonter à la coupe d'avant et non rester sur place.

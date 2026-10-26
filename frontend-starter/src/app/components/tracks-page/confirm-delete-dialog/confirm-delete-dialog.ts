@@ -16,7 +16,7 @@ export const CONFIRM_DELETE_PANEL_CLASS = 'track-confirm-dialog';
  */
 export interface ConfirmDeleteDialogData {
   title: string;
-  target?: 'track' | 'cover';
+  target?: 'track' | 'cover' | 'clip';
 }
 
 /**
