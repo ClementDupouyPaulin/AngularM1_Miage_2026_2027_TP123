@@ -1,0 +1,26 @@
+<div class="film">
+  <ol class="strip" #strip [attr.aria-label]="'Pellicule : ' + cells().length + ' plans'">
+    @for (cell of cells(); track cell.index) {
+      <li class="cell-slot">
+        <button
+          type="button"
+          class="cell"
+          [class.active]="cell.index === activeIndex()"
+          [attr.aria-current]="cell.index === activeIndex() ? 'true' : null"
+          [attr.aria-label]="'Plan ' + (cell.index + 1) + ' à ' + cell.timecode"
+          (click)="seek.emit(cell.time)"
+        >
+          <span
+            class="frame"
+            aria-hidden="true"
+            [style.background-image]="image()"
+            [style.background-position]="cell.position"
+          ></span>
+          <span class="time" aria-hidden="true">{{ cell.timecode }}</span>
+        </button>
+      </li>
+    } @empty {
+      <li class="empty">Aucune vignette</li>
+    }
+  </ol>
+</div>

@@ -1,0 +1,15 @@
+<svg
+  class="spark"
+  [attr.viewBox]="viewBox"
+  preserveAspectRatio="none"
+  focusable="false"
+  [attr.role]="label() ? 'img' : null"
+  [attr.aria-label]="label() || null"
+  [attr.aria-hidden]="label() ? null : 'true'"
+>
+  <line class="base" x1="0" x2="100" y1="28" y2="28" />
+  @if (line()) {
+    <path class="area" [attr.d]="area()" />
+    <path class="line" [attr.d]="line()" />
+  }
+</svg>

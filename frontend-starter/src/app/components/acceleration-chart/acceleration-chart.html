@@ -1,0 +1,28 @@
+<figure class="acceleration" role="img" [attr.aria-label]="summary()">
+  <div class="plot">
+    <span class="peak mono" aria-hidden="true">{{ peak() }}</span>
+    <svg class="chart" [attr.viewBox]="viewBox" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      @for (tick of ticks(); track tick.time) {
+        <line class="grid" [attr.x1]="tick.x" [attr.x2]="tick.x" y1="0" [attr.y2]="chartBottom" />
+      }
+      <line class="baseline" x1="0" [attr.x2]="viewWidth" [attr.y1]="chartBottom" [attr.y2]="chartBottom" />
+      <path class="area" [attr.d]="mainArea()" />
+      <path class="line" [attr.d]="mainPath()" />
+      @if (comparePath()) {
+        <path class="line-compare" [attr.d]="comparePath()" />
+      }
+    </svg>
+  </div>
+  <div class="axis" aria-hidden="true">
+    @for (tick of ticks(); track tick.time) {
+      <span class="tick mono" [style.left.%]="tick.percent">{{ tick.label }}</span>
+    }
+  </div>
+  <figcaption class="legend" aria-hidden="true">
+    <span><span class="swatch swatch-main"></span>{{ mainName() }}</span>
+    @if (comparePath()) {
+      <span><span class="swatch swatch-compare"></span>{{ compareName() }} (pointillé)</span>
+    }
+    <span class="note">Coupes par fenêtre de {{ windowSec }} s</span>
+  </figcaption>
+</figure>

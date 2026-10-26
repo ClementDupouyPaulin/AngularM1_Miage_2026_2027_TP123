@@ -1,0 +1,44 @@
+:host { display: block; }
+
+.histogram { margin: 0; }
+
+.chart { display: block; width: 100%; height: auto; max-height: 16rem; }
+
+.baseline { stroke: var(--border); stroke-width: 1; }
+
+.bar { fill: var(--accent); }
+
+.bar-compare {
+  fill: none;
+  stroke: var(--beat);
+  stroke-width: 3;
+  stroke-dasharray: 6 4;
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.bin-label {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  fill: var(--text-muted);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.legend > span { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+.swatch { display: inline-block; width: 1rem; height: 0.75rem; border-radius: 2px; }
+.swatch-main { background: var(--accent); }
+.swatch-compare { border: 2px dashed var(--beat); }

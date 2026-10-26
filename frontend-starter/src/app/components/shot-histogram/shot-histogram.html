@@ -1,0 +1,20 @@
+<figure class="histogram" role="img" [attr.aria-label]="summary()">
+  <svg class="chart" [attr.viewBox]="viewBox" aria-hidden="true" focusable="false">
+    <line class="baseline" x1="0" [attr.x2]="viewWidth" [attr.y1]="chartBottom" [attr.y2]="chartBottom" />
+    @for (bar of bars(); track bar.label) {
+      <rect class="bar" [attr.x]="bar.main.x" [attr.y]="bar.main.y" [attr.width]="bar.main.width" [attr.height]="bar.main.height" rx="3" />
+      @if (bar.compare; as compare) {
+        <rect class="bar-compare" [attr.x]="compare.x" [attr.y]="compare.y" [attr.width]="compare.width" [attr.height]="compare.height" rx="3" />
+      }
+      <text class="value" [attr.x]="bar.center" [attr.y]="bar.valueY" text-anchor="middle">{{ bar.value }}</text>
+      <text class="bin-label" [attr.x]="bar.center" [attr.y]="labelY" text-anchor="middle">{{ bar.label }}</text>
+    }
+  </svg>
+  <figcaption class="legend" aria-hidden="true">
+    <span><span class="swatch swatch-main"></span>{{ mainName() }}</span>
+    @if (compareBins()) {
+      <span><span class="swatch swatch-compare"></span>{{ compareName() }} (contour pointillé)</span>
+    }
+    <span class="note">Effectifs ; hauteurs en part des plans</span>
+  </figcaption>
+</figure>

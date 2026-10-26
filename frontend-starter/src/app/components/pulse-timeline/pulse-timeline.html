@@ -1,3 +1,21 @@
+@if (pins().length > 0) {
+  <ul class="pins" aria-label="Annotations">
+    @for (pin of pins(); track pin.id) {
+      <li class="pin-slot" [style.left.%]="pin.percent">
+        <button
+          type="button"
+          class="pin"
+          [attr.aria-label]="'Annotation à ' + pin.timecode + ' par ' + pin.author + ' : ' + pin.text"
+          (click)="onPinClick(pin.time)"
+        >
+          <span class="pin-head" aria-hidden="true"></span>
+          <span class="pin-text" aria-hidden="true"><span class="mono">{{ pin.timecode }}</span> {{ pin.text }}</span>
+        </button>
+      </li>
+    }
+  </ul>
+}
+
 <div
   class="timeline"
   role="slider"
@@ -8,55 +26,85 @@
   [attr.aria-valuenow]="valueNow()"
   [attr.aria-valuetext]="valueText()"
   aria-orientation="horizontal"
+  aria-keyshortcuts="N"
   (keydown)="onKeydown($event)"
+  (focus)="focused.set(true)"
+  (blur)="focused.set(false)"
 >
-  <div class="plot" #plot (click)="onPlotClick($event)" (mouseleave)="hoveredCut.set(null)">
+  <div
+    class="plot"
+    #plot
+    (click)="onPlotClick($event)"
+    (dblclick)="onPlotDblClick($event)"
+    (mousemove)="onPlotMove($event)"
+    (mouseleave)="hover.set(null)"
+  >
     <svg
       class="chart"
-      [attr.viewBox]="viewBox"
+      [attr.viewBox]="viewBox()"
       preserveAspectRatio="none"
       aria-hidden="true"
       focusable="false"
     >
-      <rect class="beat-band" x="0" [attr.y]="beatTop" [attr.width]="viewWidth" [attr.height]="beatBottom - beatTop" rx="4" />
+      @if (showPalette() && paletteStops().length > 0) {
+        <defs>
+          <linearGradient [attr.id]="gradientId" x1="0" x2="1" y1="0" y2="0">
+            @for (stop of paletteStops(); track $index) {
+              <stop [attr.offset]="stop.offset + '%'" [attr.stop-color]="stop.color" />
+            }
+          </linearGradient>
+        </defs>
+        <rect
+          class="palette"
+          x="0"
+          [attr.y]="paletteTop"
+          [attr.width]="paletteWidth()"
+          [attr.height]="paletteHeight"
+          [attr.fill]="'url(#' + gradientId + ')'"
+        />
+      }
+      @if (showBeats()) {
+        <rect class="beat-band" x="0" [attr.y]="beatTop" [attr.width]="viewWidth" [attr.height]="beatBottom - beatTop" rx="4" />
+      }
       @for (tick of ticks(); track tick.time) {
-        <line class="grid" [attr.x1]="tick.x" [attr.x2]="tick.x" y1="0" [attr.y2]="pulseBottom" />
+        <line class="grid" [attr.x1]="tick.x" [attr.x2]="tick.x" [attr.y1]="pulseTop()" [attr.y2]="pulseBottom" />
       }
       <line class="baseline" x1="0" [attr.x2]="viewWidth" [attr.y1]="pulseBottom" [attr.y2]="pulseBottom" />
       <path class="pulse-area" [attr.d]="areaPath()" />
       <path class="pulse-line" [attr.d]="linePath()" />
+      @for (fade of fadeMarks(); track $index) {
+        <line class="fade" [attr.x1]="fade.x" [attr.x2]="fade.x" [attr.y1]="pulseTop()" [attr.y2]="pulseBottom" />
+      }
       @for (cut of cutMarks(); track cut.index) {
         <line
           class="cut"
-          [class.active]="hoveredCut() === cut.index"
+          [class.active]="hover()?.cutIndex === cut.index"
           [attr.x1]="cut.x"
           [attr.x2]="cut.x"
-          y1="20"
+          [attr.y1]="pulseTop() + 8"
           [attr.y2]="pulseBottom"
         />
-        <rect
-          class="cut-hit"
-          [attr.x]="cut.x - 6"
-          y="0"
-          width="12"
-          [attr.height]="pulseBottom"
-          (mouseenter)="hoveredCut.set(cut.index)"
-          (click)="onCutClick($event, cut.time)"
-        />
       }
-      <path class="beats" [attr.d]="beatPath()" />
+      @if (showBeats()) {
+        <path class="beats" [attr.d]="beatPath()" />
+      }
     </svg>
 
     <div class="cursor" [style.left.%]="cursorPercent()" aria-hidden="true"></div>
 
-    @if (hoveredLabel(); as hovered) {
-      <div class="tooltip" [style.left.%]="hovered.percent" aria-hidden="true">{{ hovered.text }}</div>
+    @if (tooltip(); as tip) {
+      <div class="tooltip" [style.left.%]="tip.percent" aria-hidden="true">
+        @if (tip.thumb; as thumb) {
+          <span class="thumb" [style.background-image]="thumb.image" [style.background-position]="thumb.position"></span>
+        }
+        <span class="tooltip-text">{{ tip.title }} · <span class="mono">{{ tip.timecode }}</span></span>
+      </div>
     }
   </div>
 
   <div class="axis" aria-hidden="true">
     @for (tick of ticks(); track tick.time) {
-      <span class="tick" [style.left.%]="tick.percent">{{ tick.label }}</span>
+      <span class="tick mono" [style.left.%]="tick.percent">{{ tick.label }}</span>
     }
   </div>
 </div>
@@ -64,6 +112,15 @@
 <ul class="legend" aria-label="Légende">
   <li><span class="swatch swatch-pulse" aria-hidden="true"></span>Pouls (coupes par fenêtre de 5 s, pic {{ peakLabel() }})</li>
   <li><span class="swatch swatch-cut" aria-hidden="true"></span>Coupe</li>
-  <li><span class="swatch swatch-beat" aria-hidden="true"></span>Beat de la bande-son</li>
+  @if (fadeMarks().length > 0) {
+    <li><span class="swatch swatch-fade" aria-hidden="true"></span>Fondu (pointillé)</li>
+  }
+  @if (showBeats()) {
+    <li><span class="swatch swatch-beat" aria-hidden="true"></span>Beat de la bande-son</li>
+  }
+  @if (showPalette() && paletteStops().length > 0) {
+    <li><span class="swatch swatch-palette" aria-hidden="true"></span>Palette dominante</li>
+  }
   <li><span class="swatch swatch-cursor" aria-hidden="true"></span>Lecture</li>
+  <li class="hint">Maj+clic, double-clic ou touche N : annoter</li>
 </ul>
