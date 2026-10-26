@@ -1,5 +1,5 @@
 import { bootstrapApplication } from "@angular/platform-browser";
-import { provideHttpClient, withInterceptors } from "@angular/common/http";
+import { provideHttpClient, withInterceptors, withXhr } from "@angular/common/http";
 import { provideRouter } from "@angular/router";
 import { AppComponent } from './app/components/app/app';
 import { routes } from './app/routes';
@@ -9,8 +9,8 @@ import { authErrorInterceptor } from './app/shared/interceptors/auth-error.inter
 bootstrapApplication(AppComponent, {
   providers: [
     provideRouter(routes),
-    // Pas de withFetch() : le backend XHR est requis pour recevoir les
-    // événements de progression d'upload (HttpEventType.UploadProgress).
-    provideHttpClient(withInterceptors([authInterceptor, authErrorInterceptor])),
+    // Depuis Angular 22 le backend par défaut est fetch, qui n'émet pas
+    // HttpEventType.UploadProgress : withXhr() est requis pour la barre d'envoi.
+    provideHttpClient(withXhr(), withInterceptors([authInterceptor, authErrorInterceptor])),
   ],
 }).catch(console.error);
