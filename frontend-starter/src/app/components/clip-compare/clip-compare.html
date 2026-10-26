@@ -1,20 +1,22 @@
-<section class="page">
+<section class="page compare">
   <a class="back-link" routerLink="/clips">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path d="M15.4 6.6 14 5.2 7.2 12l6.8 6.8 1.4-1.4L10 12l5.4-5.4Z" fill="currentColor" />
     </svg>
-    Retour à mes extraits
+    Retour au studio
   </a>
 
-  <header class="hero">
-    <p class="eyebrow">Film Pulse · Comparaison</p>
-    <h1>Comparer deux extraits</h1>
-    <p>Superposez le pouls de deux montages sur la même échelle de temps et comparez leurs statistiques.</p>
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Film Pulse · Comparaison</p>
+      <h1>Comparer deux montages</h1>
+      <p class="lead">Lisez deux extraits en même temps et superposez leurs pouls, palettes et rythmes sur la même échelle.</p>
+    </div>
   </header>
 
   @if (listLoading()) {
     <div class="card" aria-busy="true">
-      <p class="status" role="status">Chargement de vos extraits…</p>
+      <p class="status" role="status">Chargement des extraits…</p>
       <div class="skeleton skeleton-row"></div>
     </div>
   } @else if (listError()) {
@@ -22,28 +24,39 @@
       <p class="alert alert-error" role="alert">{{ listError() }}</p>
     </div>
   } @else if (isEmpty()) {
-    <div class="card empty">
+    <div class="card empty-state empty">
       <h2>Pas assez d’extraits</h2>
-      <p>Il faut au moins deux extraits analysés pour les comparer.</p>
-      <a class="btn-link" routerLink="/clips">Analyser un extrait</a>
+      <p>Il faut au moins deux extraits accessibles (les vôtres, publics ou partagés par vos amis) pour les comparer.</p>
+      <div class="empty-actions">
+        <a class="btn btn-primary" routerLink="/clips">Analyser un extrait</a>
+        <a class="btn btn-secondary" routerLink="/discover">Découvrir des extraits</a>
+      </div>
     </div>
   } @else {
+    @if (listWarning()) {
+      <p class="alert alert-info" role="status">{{ listWarning() }}</p>
+    }
+
     <section class="card" aria-labelledby="choice-heading">
       <h2 id="choice-heading">Choix des extraits</h2>
       <div class="pickers">
         @for (side of sides; track side) {
-          <label [class]="'picker picker-' + side">
-            <span><span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>{{ sideLabels[side] }}</span>
-            <select [attr.data-side]="side" (change)="onSelect(side, $event)">
+          <label [class]="'field picker picker-' + side">
+            <span class="picker-label"><span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>{{ sideLabels[side] }}</span>
+            <select class="select" [attr.data-side]="side" (change)="onSelect(side, $event)">
               <option value="" [selected]="!selected()[side]">— Choisir un extrait —</option>
-              @for (clip of options(); track clip.id) {
-                <option
-                  [value]="clip.id"
-                  [selected]="clip.id === selected()[side]"
-                  [disabled]="clip.id === selected()[side === 'a' ? 'b' : 'a']"
-                >
-                  {{ clip.title }}
-                </option>
+              @for (group of groups(); track group.key) {
+                <optgroup [label]="group.label">
+                  @for (clip of group.items; track clip.id) {
+                    <option
+                      [value]="clip.id"
+                      [selected]="clip.id === selected()[side]"
+                      [disabled]="clip.id === selected()[otherSide(side)]"
+                    >
+                      {{ clip.title }}@if (!clip.isOwner) { · {{ clip.owner.name }}}
+                    </option>
+                  }
+                </optgroup>
               }
             </select>
           </label>
@@ -51,45 +64,281 @@
       </div>
     </section>
 
-    <section class="card" aria-labelledby="pulse-heading">
-      <h2 id="pulse-heading">Pouls des montages</h2>
-      <p class="hint">Les deux courbes partagent la même échelle de temps : un montage plus court s’arrête plus tôt.</p>
-      <div class="timelines">
+    <section class="card" aria-labelledby="players-heading">
+      <h2 id="players-heading">Lecture synchronisée</h2>
+      <div class="players">
         @for (side of sides; track side) {
-          <div [class]="'timeline-block timeline-' + side" [attr.data-side]="side">
-            @let state = states()[side];
-            @if (state.status === 'ready') {
-              <h3>
-                <span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>
+          @let state = states()[side];
+          @let mediaState = media()[side];
+          <article [class]="'player player-' + side" [attr.data-side]="side">
+            <h3>
+              <span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>
+              @if (state.status === 'ready') {
                 <span class="visually-hidden">{{ sideLabels[side] }} : </span>{{ state.clip.title }}
-              </h3>
-              <app-pulse-timeline
-                [analysis]="state.clip.analysis"
-                [currentTime]="currentTimes()[side]"
-                [maxTime]="maxTime()"
-                [label]="'Pouls du montage de « ' + state.clip.title + ' » (' + sideLabels[side] + ')'"
-                (seek)="seekTo(side, $event)"
-              />
-            } @else {
-              <h3><span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>{{ sideLabels[side] }}</h3>
-              @if (state.status === 'loading') {
-                <p class="status" role="status">Chargement de l’{{ sideLabels[side].toLowerCase() }}…</p>
-                <div class="skeleton skeleton-timeline"></div>
-              } @else if (state.status === 'error') {
-                <p class="alert alert-error" role="alert">{{ state.message }}</p>
               } @else {
-                <p class="placeholder">Choisissez un extrait pour afficher son pouls.</p>
+                {{ sideLabels[side] }}
+              }
+            </h3>
+            @switch (state.status) {
+              @case ('loading') {
+                <p class="status" role="status">Chargement de l’{{ sideLabels[side].toLowerCase() }}…</p>
+                <div class="skeleton skeleton-video"></div>
+              }
+              @case ('error') {
+                <p class="alert alert-error" role="alert">{{ state.message }}</p>
+              }
+              @case ('idle') {
+                <p class="placeholder">Choisissez un extrait pour le lire ici.</p>
+              }
+              @case ('ready') {
+                @if (mediaState.status === 'ready') {
+                  <video
+                    #player
+                    class="video"
+                    [attr.data-side]="side"
+                    [src]="mediaState.videoUrl"
+                    [muted]="muted()[side]"
+                    [attr.aria-label]="'Vidéo de « ' + state.clip.title + ' » (' + sideLabels[side] + ')'"
+                    preload="auto"
+                    playsinline
+                    (loadedmetadata)="onLoadedMetadata(side)"
+                    (ended)="onEnded(side)"
+                  ></video>
+                } @else if (mediaState.status === 'error') {
+                  <p class="alert alert-error" role="alert">{{ mediaState.message }}</p>
+                } @else {
+                  <p class="status" role="status">Chargement de la vidéo…</p>
+                  <div class="skeleton skeleton-video"></div>
+                }
+                <div class="player-bar">
+                  <span class="timecode" aria-hidden="true">{{ formatTimecode(sideTimes()[side]) }}</span>
+                  @if (mode() === 'relative') {
+                    <span class="chip">Vitesse {{ formatSpeed(rates()[side]) }}</span>
+                  }
+                  <button
+                    type="button"
+                    class="btn btn-ghost mute"
+                    [attr.data-side]="side"
+                    [attr.aria-pressed]="muted()[side]"
+                    (click)="toggleMute(side)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      @if (muted()[side]) {
+                        <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3Zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7Z" />
+                      } @else {
+                        <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z" />
+                      }
+                    </svg>
+                    Muet {{ side.toUpperCase() }}
+                  </button>
+                </div>
+                <a class="studio-link" [routerLink]="['/clips', state.clip.id]">
+                  Ouvrir la salle de montage<span class="visually-hidden"> de « {{ state.clip.title }} »</span>
+                </a>
               }
             }
-          </div>
+          </article>
         }
       </div>
+
+      <div class="transport" role="group" aria-label="Commandes de lecture communes">
+        <button
+          type="button"
+          class="btn btn-primary play"
+          [disabled]="!transportReady()"
+          [attr.aria-label]="playing() ? 'Mettre en pause les deux vidéos' : 'Lire les deux vidéos'"
+          (click)="togglePlay()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            @if (playing()) {
+              <path fill="currentColor" d="M6 5h4v14H6V5Zm8 0h4v14h-4V5Z" />
+            } @else {
+              <path fill="currentColor" d="M8 5v14l11-7L8 5Z" />
+            }
+          </svg>
+          {{ playing() ? 'Pause' : 'Lire' }}
+        </button>
+
+        <label class="scrub">
+          <span class="visually-hidden">Position commune</span>
+          <input
+            type="range"
+            min="0"
+            step="0.1"
+            [attr.max]="maxTime()"
+            [value]="'' + position()"
+            [attr.aria-valuetext]="positionValueText()"
+            [disabled]="!transportReady()"
+            (input)="onScrub($event)"
+          />
+        </label>
+        <span class="timecode position" aria-hidden="true">{{ positionText() }}</span>
+
+        <fieldset class="modes">
+          <legend>Alignement</legend>
+          @for (option of modes; track option) {
+            <label class="mode">
+              <input
+                type="radio"
+                name="sync-mode"
+                [value]="option"
+                [checked]="mode() === option"
+                (change)="setMode(option)"
+              />
+              {{ modeLabels[option] }}
+            </label>
+          }
+        </fieldset>
+
+        <label class="speed">
+          Vitesse
+          <select class="select" (change)="onSpeed($event)">
+            @for (option of speeds; track option) {
+              <option [value]="option" [selected]="option === speed()">{{ formatSpeed(option) }}</option>
+            }
+          </select>
+        </label>
+      </div>
+      @if (playError()) {
+        <p class="alert alert-error" role="alert">{{ playError() }}</p>
+      }
+      <p class="hint transport-hint">
+        @if (mode() === 'absolute') {
+          Les deux vidéos partagent le même instant ; la plus courte s’arrête à sa fin.
+        } @else {
+          Chaque vidéo est au même pourcentage de sa durée : la plus courte est ralentie pour finir en même temps.
+        }
+      </p>
     </section>
 
+    @if (readyClips().a || readyClips().b) {
+      <section class="card" aria-labelledby="pulse-heading">
+        <h2 id="pulse-heading">Pouls des montages</h2>
+        <p class="hint">Même échelle de temps pour les deux courbes : un montage plus court s’arrête plus tôt.</p>
+        <div class="timelines">
+          @for (side of sides; track side) {
+            @if (readyClips()[side]; as clip) {
+              <div [class]="'timeline-block timeline-' + side" [attr.data-side]="side">
+                <h3>
+                  <span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>
+                  <span class="visually-hidden">{{ sideLabels[side] }} : </span>{{ clip.title }}
+                </h3>
+                <app-pulse-timeline
+                  [analysis]="clip.analysis"
+                  [currentTime]="sideTimes()[side]"
+                  [maxTime]="maxTime()"
+                  [filmstripUrl]="filmstripUrls()[side]"
+                  [showPalette]="false"
+                  [label]="'Pouls du montage de « ' + clip.title + ' » (' + sideLabels[side] + ')'"
+                  (seek)="onSideSeek(side, $event)"
+                />
+              </div>
+            }
+          }
+        </div>
+
+        <h3 class="subheading">Palettes dominantes</h3>
+        <div class="palettes">
+          @for (side of sides; track side) {
+            @if (readyClips()[side]; as clip) {
+              <div
+                [class]="'palette-row palette-' + side"
+                role="group"
+                [attr.aria-label]="'Palette de « ' + clip.title + ' » (' + sideLabels[side] + ')'"
+              >
+                <span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>
+                <div class="palette-track">
+                  <div class="palette-fill" [style.width.%]="durationShare(side)">
+                    <app-palette-band
+                      [palette]="clip.analysis.palette"
+                      [currentTime]="sideTimes()[side]"
+                      [durationSec]="clip.analysis.durationSec"
+                      (seek)="onSideSeek(side, $event)"
+                    />
+                  </div>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </section>
+    }
+
     @if (pair(); as pair) {
+      <div class="charts">
+        <section class="card" aria-labelledby="histogram-heading">
+          <h2 id="histogram-heading">Durées des plans</h2>
+          <app-shot-histogram
+            [cuts]="pair.a.analysis.cuts"
+            [durationSec]="pair.a.analysis.durationSec"
+            [compareCuts]="pair.b.analysis.cuts"
+            [compareDurationSec]="pair.b.analysis.durationSec"
+            [label]="'A · ' + pair.a.title"
+            [compareLabel]="'B · ' + pair.b.title"
+          />
+        </section>
+        <section class="card" aria-labelledby="acceleration-heading">
+          <h2 id="acceleration-heading">Accélération du montage</h2>
+          <app-acceleration-chart
+            [cuts]="pair.a.analysis.cuts"
+            [durationSec]="pair.a.analysis.durationSec"
+            [compareCuts]="pair.b.analysis.cuts"
+            [compareDurationSec]="pair.b.analysis.durationSec"
+            [label]="'A · ' + pair.a.title"
+            [compareLabel]="'B · ' + pair.b.title"
+          />
+        </section>
+      </div>
+
+      @if (profiles(); as profiles) {
+        <div class="profiles">
+          @for (side of sides; track side) {
+            @let profile = profiles[side];
+            <article [class]="'card perf profile profile-' + side" [attr.aria-labelledby]="'profile-' + side">
+              <p class="eyebrow">{{ sideLabels[side] }}</p>
+              <h2 [id]="'profile-' + side">{{ pair[side].title }}</h2>
+              <span [class]="'chip ' + toneChips[profile.rhythm.tone]">{{ profile.rhythm.label }}</span>
+              <dl class="profile-stats">
+                <div class="stat">
+                  <dt class="stat-label">Coupes/min</dt>
+                  <dd class="stat-value">{{ formatDecimal(profile.rhythm.cutsPerMinute, 1) }}</dd>
+                </div>
+                <div class="stat">
+                  <dt class="stat-label">Plan médian</dt>
+                  <dd class="stat-value">{{ formatDecimal(profile.rhythm.medianShotLength, 1) }} s</dd>
+                </div>
+                <div class="stat">
+                  <dt class="stat-label">BPM musique</dt>
+                  <dd class="stat-value">{{ formatBpm(profile.bpm) }}</dd>
+                </div>
+              </dl>
+              <a class="studio-link" [routerLink]="['/clips', pair[side].id]">
+                Ouvrir la salle de montage<span class="visually-hidden"> de « {{ pair[side].title }} »</span>
+              </a>
+            </article>
+          }
+        </div>
+      }
+
       <section class="card" aria-labelledby="stats-heading">
         <h2 id="stats-heading">Statistiques comparées</h2>
         <p class="summary" aria-live="polite">{{ summary() }}</p>
+        @if (comparison(); as comparison) {
+          <ul class="verdicts">
+            @if (comparison.nervous; as nervous) {
+              <li class="verdict">
+                <span class="verdict-icon" aria-hidden="true">{{ nervousBadge.icon }}</span>
+                {{ nervousBadge.label }} : {{ nervous.toUpperCase() }} (« {{ pair[nervous].title }} »)
+              </li>
+            }
+            @if (comparison.synced; as synced) {
+              <li class="verdict">
+                <span class="verdict-icon" aria-hidden="true">{{ syncedBadge.icon }}</span>
+                {{ syncedBadge.label }} : {{ synced.toUpperCase() }} (« {{ pair[synced].title }} »)
+              </li>
+            }
+          </ul>
+        }
         <div class="table-wrap">
           <table class="compare-table">
             <caption class="visually-hidden">
