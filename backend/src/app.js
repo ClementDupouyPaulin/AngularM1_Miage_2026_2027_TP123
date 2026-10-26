@@ -26,7 +26,17 @@ import {
   CLIP_TAG_MAX_LENGTH,
   ANNOTATION_TEXT_MAX_LENGTH,
   MAX_ANNOTATIONS,
+  MAX_SHARED_WITH,
 } from "./models/Clip.js";
+import {
+  Friendship,
+  acceptedFriendshipsOf,
+  areFriends,
+  friendIdsOf,
+  involving,
+  otherParty,
+  pairKeyOf,
+} from "./models/Friendship.js";
 
 // Les fichiers audio restent sur le disque du serveur dans ce TP.
 // MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
@@ -137,6 +147,18 @@ const CLIP_STATS_SELECT = [
 ].join(" ");
 const CLIP_PATCH_KEYS =["title", "tags", "visibility", "sharedWith"];
 const ANNOTATION_KEYS = ["time", "text"];
+const DISCOVER_SCOPES = ["public", "friends", "shared"];
+const DISCOVER_SORTS = {
+  recent: { createdAt: -1 },
+  nervous: { avgShotLength: 1, createdAt: -1 },
+  synced: { syncScore: -1, createdAt: -1 },
+};
+const DEFAULT_ACTIVITY_LIMIT = 20;
+const MAX_ACTIVITY_LIMIT = 50;
+const MAX_EMAIL_LENGTH = 254;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INVITATION_SENT = "Si ce compte existe, une invitation a été envoyée.";
+const DUPLICATE_KEY_CODE = 11000;
 
 const COVER_ATTRIBUTION =
   "Pochettes fournies par l'API iTunes Search d'Apple ; elles restent la propriété de leurs ayants droit.";
@@ -268,11 +290,15 @@ async function replaceCover(track, cover) {
 }
 
 /**
- * Règle de lecture d'un clip. Pour l'instant seul le propriétaire lit ses
- * clips ; la visibilité et le partage élargiront cette règle.
+ * Règle de lecture d'un clip : propriétaire, clip public, ou clip partagé avec
+ * le lecteur ET amitié acceptée vérifiée maintenant (un ex-ami perd l'accès).
  */
 async function canReadClip(clip, userId) {
-  return String(clip.ownerId) === String(userId);
+  if (String(clip.ownerId) === String(userId)) return true;
+  if (clip.visibility === "public") return true;
+  if (clip.visibility !== "shared") return false;
+  if (!(clip.sharedWith ?? []).some((id) => String(id) === String(userId))) return false;
+  return areFriends(clip.ownerId, userId);
 }
 
 /** Retrouve un clip lisible par l'utilisateur connecté (null sinon). */
@@ -589,7 +615,19 @@ function validateTitle(value) {
   return title;
 }
 
-/** Valide un `ClipPatch` ; `sharedWith` est accepté mais pas encore appliqué. */
+/** Valide la forme de `sharedWith` : identifiants distincts ; l'amitié est vérifiée ensuite. */
+function validateSharedWith(values) {
+  if (!Array.isArray(values) || values.some((id) => typeof id !== "string" || !mongoose.isValidObjectId(id))) {
+    throw new HttpError(400, "Partage invalide : tableau d'identifiants attendu");
+  }
+  const ids = [...new Set(values)];
+  if (ids.length > MAX_SHARED_WITH) {
+    throw new HttpError(400, `Partage limité à ${MAX_SHARED_WITH} destinataires`);
+  }
+  return ids;
+}
+
+/** Valide un `ClipPatch` ; l'amitié des destinataires de `sharedWith` est vérifiée par la route. */
 function parseClipPatch(body) {
   if (!isPlainObject(body)) throw new HttpError(400, "Corps JSON attendu");
   if (Object.keys(body).some((key) => !CLIP_PATCH_KEYS.includes(key))) {
@@ -599,7 +637,17 @@ function parseClipPatch(body) {
   if (Object.hasOwn(body, "title")) changes.title = validateTitle(body.title);
   if (Object.hasOwn(body, "tags")) changes.tags = validateTags(body.tags);
   if (Object.hasOwn(body, "visibility")) changes.visibility = validateVisibility(body.visibility);
+  if (Object.hasOwn(body, "sharedWith")) changes.sharedWith = validateSharedWith(body.sharedWith);
   return changes;
+}
+
+/** Refuse tout destinataire qui n'est pas un ami accepté du propriétaire. */
+async function checkRecipientsAreFriends(ownerId, ids) {
+  if (ids.length === 0) return;
+  const friends = new Set((await friendIdsOf(ownerId)).map(String));
+  if (ids.some((id) => !friends.has(id))) {
+    throw new HttpError(400, "Partage invalide : seuls vos amis peuvent être destinataires");
+  }
 }
 
 /** Valide `{time, text}` d'une annotation ; `time` doit tomber dans le clip. */
@@ -652,6 +700,134 @@ const clipSummaryStages = () => [
   { $addFields: { hasFilmstrip: { $eq: [{ $type: "$filmstripStoredName" }, "string"] } } },
   { $project: Object.fromEntries(CLIP_SUMMARY_EXCLUDED.map((field) => [field, 0])) },
 ];
+
+/** Paramètres de `GET /clips/discover` : portée, tri et filtres de liste. */
+function parseDiscoverQuery(query) {
+  const scope = query.scope ?? "public";
+  if (!DISCOVER_SCOPES.includes(scope)) {
+    throw new HttpError(400, "Portée invalide : public, friends ou shared attendu");
+  }
+  const sort = query.sort ?? "recent";
+  if (typeof sort !== "string" || !Object.hasOwn(DISCOVER_SORTS, sort)) {
+    throw new HttpError(400, "Tri invalide : recent, nervous ou synced attendu");
+  }
+  if (query.visibility !== undefined) throw new HttpError(400, "Filtre de visibilité non disponible ici");
+  return { scope, sort, filters: parseClipFilters(query) };
+}
+
+/** `$match` des clips d'autrui visibles dans une portée de découverte. */
+function discoverMatch(scope, viewerId, friendIds) {
+  if (scope === "public") return { ownerId: { $ne: viewerId }, visibility: "public" };
+  if (scope === "shared") return { ownerId: { $in: friendIds }, visibility: "shared", sharedWith: viewerId };
+  return {
+    ownerId: { $in: friendIds },
+    $or: [{ visibility: "public" }, { visibility: "shared", sharedWith: viewerId }],
+  };
+}
+
+/** Écarte les clips sans valeur pour le tri demandé (sans coupe, sans score). */
+function discoverSortMatch(sort) {
+  if (sort === "nervous") return { cutCount: { $gt: 0 } };
+  if (sort === "synced") return { syncScore: { $ne: null } };
+  return {};
+}
+
+function parseActivityLimit(query) {
+  if (query.limit === undefined) return DEFAULT_ACTIVITY_LIMIT;
+  const limit = Number(query.limit);
+  if (typeof query.limit !== "string" || !Number.isInteger(limit) || limit < 1 || limit > MAX_ACTIVITY_LIMIT) {
+    throw new HttpError(400, `Limite invalide : entier de 1 à ${MAX_ACTIVITY_LIMIT} attendu`);
+  }
+  return limit;
+}
+
+function parseInvitationEmail(body) {
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || email.length > MAX_EMAIL_LENGTH || !EMAIL_PATTERN.test(email)) {
+    throw new HttpError(400, "E-mail invalide");
+  }
+  return email;
+}
+
+/** Nom et e-mail des utilisateurs cités, réservés aux parties d'une relation. */
+async function loadFriendUsers(ids) {
+  const unique = [...new Set(ids.map(String))];
+  if (unique.length === 0) return new Map();
+  const users = await User.find({ _id: { $in: unique } }).select("name email").lean();
+  return new Map(users.map((user) => [String(user._id), user]));
+}
+
+const toFriendUser = (id, users) => {
+  const user = users.get(String(id));
+  return { id: String(id), name: user?.name ?? "Utilisateur inconnu", email: user?.email ?? "" };
+};
+
+const toFriendEntry = (friendship, viewerId, users) => ({
+  friendshipId: String(friendship._id),
+  user: toFriendUser(otherParty(friendship, viewerId), users),
+  since: friendship.acceptedAt,
+});
+
+const toFriendRequest = (friendship, viewerId, users) => ({
+  id: String(friendship._id),
+  user: toFriendUser(otherParty(friendship, viewerId), users),
+  direction: String(friendship.recipient) === String(viewerId) ? "incoming" : "outgoing",
+  createdAt: friendship.createdAt,
+});
+
+/** Clips récents de mes amis que je peux lire (publics ou partagés avec moi). */
+async function friendClipEvents(viewerId, friendIds, limit) {
+  if (friendIds.length === 0) return [];
+  const clips = await Clip.find(discoverMatch("friends", viewerId, friendIds))
+    .select("title ownerId createdAt")
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .lean();
+  return clips.map((clip) => ({
+    id: `clip-${clip._id}`,
+    type: "clip",
+    actorId: clip.ownerId,
+    clipId: String(clip._id),
+    clipTitle: clip.title,
+    at: clip.createdAt,
+  }));
+}
+
+/** Annotations laissées par d'autres utilisateurs sur mes clips. */
+async function annotationEvents(viewerId, limit) {
+  const clips = await Clip.find({
+    ownerId: viewerId,
+    annotations: { $elemMatch: { authorId: { $ne: viewerId } } },
+  })
+    .select("title annotations")
+    .lean();
+  return clips
+    .flatMap((clip) =>
+      clip.annotations
+        .filter((annotation) => String(annotation.authorId) !== String(viewerId))
+        .map((annotation) => ({
+          id: `annotation-${annotation._id}`,
+          type: "annotation",
+          actorId: annotation.authorId,
+          clipId: String(clip._id),
+          clipTitle: clip.title,
+          text: annotation.text,
+          at: annotation.createdAt,
+        })),
+    )
+    .sort(byRecentEvent)
+    .slice(0, limit);
+}
+
+const friendEvents = (friendships, viewerId, limit) =>
+  friendships.slice(0, limit).map((friendship) => ({
+    id: `friend-${friendship._id}`,
+    type: "friend",
+    actorId: otherParty(friendship, viewerId),
+    at: friendship.acceptedAt,
+  }));
+
+const byRecentEvent = (a, b) => new Date(b.at) - new Date(a.at);
 
 function parsePagination(query) {
   return {
@@ -1459,6 +1635,38 @@ export function createApp() {
     }
   });
 
+  /** Clips d'autrui lisibles : publics, de mes amis ou partagés avec moi (avant /clips/:id). */
+  app.get("/api/clips/discover", auth, async (req, res, next) => {
+    try {
+      const { page, limit } = parsePagination(req.query);
+      const { scope, sort, filters } = parseDiscoverQuery(req.query);
+      const viewerId = new mongoose.Types.ObjectId(req.auth.sub);
+      const friendIds = scope === "public" ? [] : await friendIdsOf(viewerId);
+      console.log(
+        `[discover] Lecture scope=${scope}, sort=${sort}, page=${page}, limit=${limit}, ` +
+          `filtre=${filters.search ? "oui" : "non"}, tag=${filters.tag ?? "-"}, user=${req.auth.sub}`,
+      );
+
+      const aggregate = Clip.aggregate([
+        {
+          $match: {
+            ...clipFilterMatch(filters),
+            ...discoverSortMatch(sort),
+            ...discoverMatch(scope, viewerId, friendIds),
+          },
+        },
+        ...clipSummaryStages(),
+      ]);
+      const result = await Clip.aggregatePaginate(aggregate, { page, limit, sort: DISCOVER_SORTS[sort] });
+
+      console.log(`[discover] ${result.docs.length} clip(s) envoyé(s) sur ${result.totalDocs}`);
+      res.json(toPage(result, await publicSummaries(req, result.docs)));
+    } catch (error) {
+      console.error("[discover] Erreur de découverte des clips", error);
+      next(error);
+    }
+  });
+
   /**
    * Reçoit la vidéo (`video`), la pellicule optionnelle (`filmstrip`), le titre,
    * les étiquettes, la visibilité et l'analyse calculée par le navigateur.
@@ -1571,7 +1779,9 @@ export function createApp() {
       const clip = await findOwnedClip(req);
       if (!clip) return unknownClip(req, res);
       const changes = parseClipPatch(req.body);
+      if (changes.sharedWith) await checkRecipientsAreFriends(clip.ownerId, changes.sharedWith);
       clip.set(changes);
+      if (clip.visibility !== "shared" && clip.visibility !== "public") clip.sharedWith = [];
       await clip.save();
       console.log(`[clips] Clip modifié : ${clip.id} (${Object.keys(changes).join(", ") || "aucun champ"})`);
       res.json(await publicClip(req, clip));
@@ -1631,13 +1841,21 @@ export function createApp() {
       const clip = await findReadableClip(req);
       if (!clip) return unknownClip(req, res);
       const { time, text } = parseAnnotation(req.body, clip.durationSec);
-      if (clip.annotations.length >= MAX_ANNOTATIONS) {
-        throw new HttpError(400, `Annotations limitées à ${MAX_ANNOTATIONS} par clip`);
-      }
-      clip.annotations.push({ time, text, authorId: req.auth.sub });
-      await clip.save();
-      const annotation = clip.annotations.at(-1);
-      console.log(`[clips] Annotation ajoutée : ${annotation.id} sur ${clip.id}`);
+      const annotation = {
+        _id: new mongoose.Types.ObjectId(),
+        time,
+        text,
+        authorId: new mongoose.Types.ObjectId(req.auth.sub),
+        createdAt: new Date(),
+      };
+      // La condition sur l'index MAX-1 rend le contrôle de la limite atomique.
+      const updated = await Clip.findOneAndUpdate(
+        { _id: clip._id, [`annotations.${MAX_ANNOTATIONS - 1}`]: { $exists: false } },
+        { $push: { annotations: annotation } },
+        { projection: { _id: 1 } },
+      );
+      if (!updated) throw new HttpError(400, `Annotations limitées à ${MAX_ANNOTATIONS} par clip`);
+      console.log(`[clips] Annotation ajoutée : ${annotation._id} sur ${clip.id}`);
       res.status(201).json(toPublicAnnotation(annotation, await loadUserNames([req.auth.sub])));
     } catch (error) {
       console.error("[clips] Erreur d'ajout d'annotation", error);
@@ -1666,6 +1884,142 @@ export function createApp() {
       res.status(204).end();
     } catch (error) {
       console.error("[clips] Erreur de suppression d'annotation", error);
+      next(error);
+    }
+  });
+
+  /** Mes amis acceptés et mes demandes en attente (reçues et envoyées). */
+  app.get("/api/friends", auth, async (req, res, next) => {
+    try {
+      const viewerId = req.auth.sub;
+      const friendships = await Friendship.find(involving(viewerId)).sort({ createdAt: -1 }).lean();
+      const users = await loadFriendUsers(friendships.map((friendship) => otherParty(friendship, viewerId)));
+      const friends = friendships
+        .filter((friendship) => friendship.status === "accepted")
+        .map((friendship) => toFriendEntry(friendship, viewerId, users))
+        .sort((a, b) => a.user.name.localeCompare(b.user.name));
+      const requests = friendships
+        .filter((friendship) => friendship.status === "pending")
+        .map((friendship) => toFriendRequest(friendship, viewerId, users));
+      console.log(`[friends] ${friends.length} ami(s), ${requests.length} demande(s) pour ${viewerId}`);
+      res.json({ friends, requests });
+    } catch (error) {
+      console.error("[friends] Erreur de lecture des amis", error);
+      next(error);
+    }
+  });
+
+  /**
+   * Invite un utilisateur par e-mail. La réponse est identique que le compte
+   * existe ou non, pour ne pas permettre d'énumérer les comptes.
+   */
+  app.post("/api/friends/requests", auth, async (req, res, next) => {
+    try {
+      const email = parseInvitationEmail(req.body);
+      if (email === String(req.auth.email ?? "").toLowerCase()) {
+        throw new HttpError(400, "Vous ne pouvez pas vous inviter vous-même");
+      }
+      const recipient = await User.findOne({ email }).select("_id").lean();
+      if (!recipient) {
+        console.log(`[friends] Invitation sans destinataire connu par ${req.auth.sub}`);
+        return res.status(202).json({ message: INVITATION_SENT });
+      }
+      if (String(recipient._id) === String(req.auth.sub)) {
+        throw new HttpError(400, "Vous ne pouvez pas vous inviter vous-même");
+      }
+      if (await Friendship.exists({ pairKey: pairKeyOf(req.auth.sub, recipient._id) })) {
+        throw new HttpError(409, "Vous êtes déjà amis ou une invitation est en attente");
+      }
+      try {
+        await Friendship.create({ requester: req.auth.sub, recipient: recipient._id });
+      } catch (error) {
+        if (error?.code === DUPLICATE_KEY_CODE) {
+          throw new HttpError(409, "Vous êtes déjà amis ou une invitation est en attente");
+        }
+        throw error;
+      }
+      console.log(`[friends] Invitation envoyée par ${req.auth.sub}`);
+      res.status(202).json({ message: INVITATION_SENT });
+    } catch (error) {
+      console.error("[friends] Erreur d'envoi d'invitation", error);
+      next(error);
+    }
+  });
+
+  /** Accepte une demande reçue : réservé à son destinataire. */
+  app.post("/api/friends/requests/:id/accept", auth, async (req, res, next) => {
+    try {
+      const friendship = mongoose.isValidObjectId(req.params.id)
+        ? await Friendship.findOneAndUpdate(
+            { _id: req.params.id, recipient: req.auth.sub, status: "pending" },
+            { $set: { status: "accepted", acceptedAt: new Date() } },
+            { returnDocument: "after" },
+          ).lean()
+        : null;
+      if (!friendship) {
+        console.warn(`[friends] Demande introuvable ou interdite : ${req.params.id}`);
+        return res.status(404).json({ message: "Demande inconnue" });
+      }
+      const users = await loadFriendUsers([friendship.requester]);
+      console.log(`[friends] Demande acceptée : ${friendship._id}`);
+      res.json(toFriendEntry(friendship, req.auth.sub, users));
+    } catch (error) {
+      console.error("[friends] Erreur d'acceptation", error);
+      next(error);
+    }
+  });
+
+  /**
+   * Refuse, annule ou retire une relation (l'une ou l'autre partie). Retirer
+   * une amitié retire aussi chaque partie du partage des clips de l'autre.
+   */
+  app.delete("/api/friends/:id", auth, async (req, res, next) => {
+    try {
+      const friendship = mongoose.isValidObjectId(req.params.id)
+        ? await Friendship.findOneAndDelete({ _id: req.params.id, ...involving(req.auth.sub) }).lean()
+        : null;
+      if (!friendship) {
+        console.warn(`[friends] Relation introuvable ou interdite : ${req.params.id}`);
+        return res.status(404).json({ message: "Relation inconnue" });
+      }
+      if (friendship.status === "accepted") {
+        const { requester, recipient } = friendship;
+        await Promise.all([
+          Clip.updateMany({ ownerId: requester, sharedWith: recipient }, { $pull: { sharedWith: recipient } }),
+          Clip.updateMany({ ownerId: recipient, sharedWith: requester }, { $pull: { sharedWith: requester } }),
+        ]);
+      }
+      console.log(`[friends] Relation supprimée : ${friendship._id} (${friendship.status})`);
+      res.status(204).end();
+    } catch (error) {
+      console.error("[friends] Erreur de suppression de relation", error);
+      next(error);
+    }
+  });
+
+  /** Fil d'activité : clips de mes amis, annotations sur mes clips, nouvelles amitiés. */
+  app.get("/api/activity", auth, async (req, res, next) => {
+    try {
+      const limit = parseActivityLimit(req.query);
+      const viewerId = new mongoose.Types.ObjectId(req.auth.sub);
+      const friendships = await acceptedFriendshipsOf(viewerId);
+      const friendIds = friendships.map((friendship) => otherParty(friendship, viewerId));
+      const [clipEvents, notes] = await Promise.all([
+        friendClipEvents(viewerId, friendIds, limit),
+        annotationEvents(viewerId, limit),
+      ]);
+      const events = [...clipEvents, ...notes, ...friendEvents(friendships, viewerId, limit)]
+        .sort(byRecentEvent)
+        .slice(0, limit);
+      const userNames = await loadUserNames(events.map((event) => event.actorId));
+      const activity = events.map(({ actorId, ...event }) => ({
+        ...event,
+        actor: { id: String(actorId), name: userNames.get(String(actorId)) ?? "Utilisateur inconnu" },
+      }));
+      console.log(`[activity] ${activity.length} événement(s) pour ${req.auth.sub}`);
+      res.json(activity);
+    } catch (error) {
+      console.error("[activity] Erreur de lecture de l'activité", error);
       next(error);
     }
   });

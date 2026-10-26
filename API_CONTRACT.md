@@ -24,6 +24,7 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | POST | `/clips` | multipart : `video`, `title` (optionnel), `analysis` (JSON texte v2, v1 acceptée), `filmstrip` (JPEG ≤ 1 Mo, optionnel), `tags` (JSON `string[]`, optionnel), `visibility` (optionnel, défaut `private`) + JWT | `201 Clip` |
 | GET | `/clips/stats` | JWT | `200 LibraryStats` |
 | GET | `/clips/tags` | JWT | `200 TagCount[]` (mes étiquettes) |
+| GET | `/clips/discover?scope=public&sort=recent&q=&tag=&page=1&limit=5` | JWT | `Page<ClipSummary>` (jamais mes clips) |
 | GET | `/clips/:id` | JWT | `200 Clip` |
 | GET | `/clips/:id/video` | JWT | flux vidéo (`Content-Type` vérifié) |
 | GET | `/clips/:id/filmstrip` | JWT | `200` `image/jpeg` |
@@ -32,6 +33,11 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | DELETE | `/clips/:id` | JWT (propriétaire) | `204` (supprime vidéo, pellicule et annotations) |
 | POST | `/clips/:id/annotations` | `{time, text}` + JWT (lecteur du clip) | `201 ClipAnnotation` |
 | DELETE | `/clips/:id/annotations/:annotationId` | JWT (auteur ou propriétaire) | `204` |
+| GET | `/friends` | JWT | `200 FriendsOverview` |
+| POST | `/friends/requests` | `{email}` + JWT | `202 {message}` générique |
+| POST | `/friends/requests/:id/accept` | JWT (destinataire de la demande) | `200 FriendEntry` |
+| DELETE | `/friends/:id` | JWT (l'une ou l'autre partie) | `204` (refuse, annule ou retire) |
+| GET | `/activity?limit=20` | JWT | `200 ActivityEvent[]` |
 
 `Track` : `id`, `ownerId`, `title`, `originalName`, `mimeType`, `size`, `createdAt`, `artist` et `album` (`string | null`), `hasCover` (booléen), `coverSource` (`"upload" | "id3" | "web" | null`). Les noms de fichiers sur disque ne sont jamais renvoyés.
 
@@ -49,7 +55,7 @@ Erreurs courantes : `400` validation (fichier manquant, format refusé, `q` > 10
 
 ## Film Pulse : `/clips`
 
-Lecture d'un clip : réservée pour l'instant à son propriétaire (la visibilité et le partage élargiront cette règle). Tout clip illisible répond `404 "Clip inconnu"`. Seul le propriétaire modifie (`PATCH`, `PUT analysis`) ou supprime. Les noms de fichiers sur disque (vidéo, pellicule) ne sont jamais renvoyés ; les fichiers restent à plat dans `data/uploads`.
+Lecture d'un clip (détail, `video`, `filmstrip`, ajout d'annotation) : autorisée au propriétaire, à tous si `visibility` vaut `"public"`, ou si `visibility` vaut `"shared"` ET que le lecteur figure dans `sharedWith` ET que l'amitié acceptée avec le propriétaire existe **au moment de la lecture** (un ex-ami perd l'accès immédiatement). Tout clip illisible répond `404 "Clip inconnu"` (jamais `403`, pour ne pas révéler son existence). Seul le propriétaire modifie (`PATCH`, `PUT analysis`) ou supprime. Les noms de fichiers sur disque (vidéo, pellicule) ne sont jamais renvoyés ; les fichiers restent à plat dans `data/uploads`.
 
 `ClipSummary` : `id`, `title`, `originalName`, `mimeType` (`"video/mp4" | "video/webm"`), `size`, `durationSec`, `cutCount`, `avgShotLength` (secondes), `syncScore` (`number | null`), `createdAt`, `tags` (`string[]`), `visibility` (`"private" | "shared" | "public"`), `owner` (`{id, name}`), `isOwner` (booléen), `hasFilmstrip` (booléen), `sparkline` (24 entiers : nombre de coupes par tranche de durée égale, recalculé à chaque lecture). `Clip` = `ClipSummary` + `analysis` + `annotations` (`ClipAnnotation[]` triées par `time`) + `sharedWith` (`{id, name}[]`, renseigné seulement pour le propriétaire, sinon `[]`). `ClipAnnotation` : `id`, `time`, `text`, `authorId`, `authorName`, `createdAt`.
 
@@ -61,12 +67,28 @@ Vidéos acceptées : MP4 ou WebM, 50 Mo maximum ; le `Content-Type` déclaré do
 
 Étiquettes : 5 maximum, chacune rognée et mise en minuscules, 1 à 24 caractères sans caractère de contrôle ; les doublons sont fusionnés. `GET /clips/tags` renvoie `TagCount[]` = `{tag, count}[]` triés par `count` décroissant puis par ordre alphabétique.
 
-`PATCH /clips/:id` accepte `ClipPatch` = `{ title?, tags?, visibility?, sharedWith? }` (aucune autre clé) ; `title` rogné de 1 à 200 caractères. `sharedWith` est accepté mais **pas encore appliqué** (partage à venir). `PUT /clips/:id/analysis` remplace toute l'analyse (coupes, transitions, sensibilité, `diffs`…) avec la même validation que l'upload ; `durationSec` doit être celle du clip ; les annotations sont conservées ; corps JSON de 1 Mo maximum.
+`PATCH /clips/:id` accepte `ClipPatch` = `{ title?, tags?, visibility?, sharedWith? }` (aucune autre clé) ; `title` rogné de 1 à 200 caractères. `sharedWith` = tableau d'identifiants d'utilisateurs (doublons fusionnés, 100 maximum) qui remplace la liste ; chacun doit être un ami **accepté** du propriétaire, sinon `400` sans modification. `"shared"` avec une liste vide est accepté (privé de fait). Un clip `"private"` a toujours `sharedWith` vide : passer en privé le vide. `PUT /clips/:id/analysis` remplace toute l'analyse (coupes, transitions, sensibilité, `diffs`…) avec la même validation que l'upload ; `durationSec` doit être celle du clip ; les annotations sont conservées ; corps JSON de 1 Mo maximum.
 
-Annotations : `POST /clips/:id/annotations` avec `{time, text}` (aucune autre clé), `time` dans `[0, durationSec]`, `text` rogné de 1 à 280 caractères, 200 annotations maximum par clip. `DELETE /clips/:id/annotations/:annotationId` est réservé à l'auteur de l'annotation ou au propriétaire du clip.
+Annotations : `POST /clips/:id/annotations` avec `{time, text}` (aucune autre clé), `time` dans `[0, durationSec]`, `text` rogné de 1 à 280 caractères, 200 annotations maximum par clip (contrôle atomique : l'ajout est conditionné à la taille du tableau, deux ajouts simultanés ne dépassent pas la limite). Tout lecteur autorisé du clip peut annoter. `DELETE /clips/:id/annotations/:annotationId` est réservé à l'auteur de l'annotation ou au propriétaire du clip.
 
 `LibraryStats` (`GET /clips/stats`, mes clips) : `clipCount`, `totalDurationSec`, `totalCuts`, `avgShotLength` (durée totale / nombre total de plans, `null` sans clip), `mostNervous` (`ClipSummary` au plus petit `avgShotLength`), `mostSynced` (`ClipSummary` au plus grand `syncScore` non nul), `null` sans candidat ; à égalité le plus récent l'emporte ; `byVisibility` = `{private, shared, public}` (un ancien clip sans visibilité compte comme `private`).
 
 `Page<ClipSummary>` suit les mêmes règles que `Page<Track>` (`page`, `limit` 1 à 20, `q` sur le titre, littéral, 100 caractères maximum, tri `createdAt` décroissant). Filtres optionnels : `tag` (une étiquette, comparée en minuscules) et `visibility` (`private`, `shared` ou `public`).
 
 Erreurs : `400` (vidéo manquante, format refusé, octets non conformes, vidéo trop lourde, pellicule invalide ou de plus de 1 Mo, `analysis` manquante ou invalide, durée différente au `PUT`, étiquettes, visibilité, titre, annotation ou filtre invalides, limite de 200 annotations atteinte, champ inattendu, corps JSON invalide), `401` authentification, `403` suppression d'une annotation par un lecteur qui n'en est ni l'auteur ni le propriétaire du clip, `404` `"Clip inconnu"` (inexistant, illisible, identifiant invalide ou fichier vidéo absent du disque), `404` `"Pellicule absente"` (pas de pellicule ou fichier absent), `404` `"Annotation inconnue"`, `413` corps JSON trop volumineux, `500` si la métadonnée est supprimée mais pas un fichier du clip. Corps d'erreur : `{ "message": "..." }`.
+
+## Film Pulse : social (`/friends`, `/clips/discover`, `/activity`)
+
+Toutes ces routes exigent un JWT (`401` sinon). Les identifiants invalides donnent `404`, jamais `500`.
+
+`FriendsOverview` = `{ friends: FriendEntry[], requests: FriendRequest[] }`. `FriendEntry` = `{ friendshipId, user, since }` (amitié acceptée, `since` = date d'acceptation, tri par nom). `FriendRequest` = `{ id, user, direction: "incoming" | "outgoing", createdAt }` (demandes en attente, plus récentes d'abord). `FriendUser` = `{ id, name, email }` : l'e-mail n'est exposé qu'aux deux parties d'une relation, jamais dans les clips, la découverte ou l'activité.
+
+`POST /friends/requests` : corps `{email}` (rogné, mis en minuscules, 254 caractères maximum). Réponse **toujours** `202 {"message":"Si ce compte existe, une invitation a été envoyée."}`, que le compte existe ou non (pas d'énumération des comptes). Erreurs : `400 "E-mail invalide"`, `400` invitation de soi-même, `409` si une relation (acceptée ou en attente, dans un sens ou dans l'autre) existe déjà. Une seule relation par paire d'utilisateurs (index unique sur la paire non ordonnée).
+
+`POST /friends/requests/:id/accept` : réservé au destinataire d'une demande en attente ; `200 FriendEntry` ; sinon `404 "Demande inconnue"` (demandeur, tiers, déjà acceptée, id inconnu ou invalide).
+
+`DELETE /friends/:id` (`id` = `friendshipId` ou `id` d'une demande) : refuse, annule ou retire, par l'une ou l'autre partie ; `204` ; sinon `404 "Relation inconnue"`. Retirer une amitié acceptée retire aussi chaque partie du `sharedWith` des clips de l'autre.
+
+`GET /clips/discover` : jamais mes propres clips, seulement des `ClipSummary` (`isOwner: false`, `owner`, `sparkline`…, sans `sharedWith`). `scope` (défaut `public`) : `public` = clips publics ; `friends` = clips de mes amis acceptés, publics ou partagés avec moi ; `shared` = clips partagés avec moi par un ami accepté. `sort` (défaut `recent`) : `recent` = `createdAt` décroissant ; `nervous` = `avgShotLength` croissant, clips sans coupe exclus ; `synced` = `syncScore` décroissant, clips sans score exclus. `q`, `tag`, `page` et `limit` suivent les règles de `GET /clips` ; `visibility` n'est pas accepté. Erreurs : `400` portée, tri, recherche, étiquette ou filtre invalides.
+
+`GET /activity?limit=20` : `limit` entier de 1 à 50 (défaut 20), sinon `400 "Limite invalide…"`. Renvoie `ActivityEvent[]` = `{ id, type, actor: {id, name}, clipId?, clipTitle?, text?, at }` triés par `at` décroissant, fusion de : `"clip"` (clips récents de mes amis que je peux lire), `"annotation"` (annotations d'autres utilisateurs sur mes clips, avec `text`), `"friend"` (amitiés acceptées me concernant). Aucun clip non autorisé n'y figure.

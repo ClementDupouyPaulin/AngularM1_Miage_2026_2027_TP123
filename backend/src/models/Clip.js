@@ -12,6 +12,7 @@ export const CLIP_TAG_MAX_COUNT = 5;
 export const CLIP_TAG_MAX_LENGTH = 24;
 export const ANNOTATION_TEXT_MAX_LENGTH = 280;
 export const MAX_ANNOTATIONS = 200;
+export const MAX_SHARED_WITH = 100;
 export const SPARKLINE_BUCKETS = 24;
 const VIDEO_MIME_TYPES = ["video/mp4", "video/webm"];
 const UNKNOWN_USER_NAME = "Utilisateur inconnu";
@@ -74,7 +75,14 @@ const schema = new mongoose.Schema(
       },
     },
     visibility: { type: String, enum: CLIP_VISIBILITIES, default: "private" },
-    sharedWith: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [] },
+    sharedWith: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+      validate: {
+        validator: (ids) => ids.length <= MAX_SHARED_WITH,
+        message: `${MAX_SHARED_WITH} destinataires maximum`,
+      },
+    },
     annotations: {
       type: [annotationSchema],
       default: [],
@@ -102,6 +110,8 @@ const schema = new mongoose.Schema(
 
 schema.index({ ownerId: 1, createdAt: -1 });
 schema.index({ ownerId: 1, tags: 1 });
+schema.index({ visibility: 1, createdAt: -1 });
+schema.index({ sharedWith: 1, createdAt: -1 });
 
 schema.plugin(aggregatePaginate);
 

@@ -112,6 +112,15 @@ Clip.findOneAndDelete = (filter) => {
   if (doc) store.delete(String(doc._id));
   return fakeQuery(doc);
 };
+// Ajout atomique d'annotation : condition « pas d'élément à l'index MAX-1 » puis $push.
+Clip.findOneAndUpdate = (filter, update) => {
+  const doc = findInStore(filter);
+  const [sizeKey] = Object.keys(filter).filter((key) => key.startsWith("annotations."));
+  const full = sizeKey && doc && doc.annotations.length > Number(sizeKey.split(".")[1]);
+  if (!doc || full) return fakeQuery(null);
+  doc.annotations.push(update.$push.annotations);
+  return fakeQuery(doc);
+};
 Clip.find = (filter) =>
   fakeQuery(
     [...store.values()]
@@ -615,12 +624,12 @@ test("pellicule : JPEG envoyé avec nosniff ; absente ou fichier manquant = 404"
 
 /* ---- PATCH ---- */
 
-test("PATCH : titre, étiquettes et visibilité modifiés ; sharedWith ignoré", async () => {
+test("PATCH : titre, étiquettes, visibilité et partage vide modifiés", async () => {
   const clip = seedClip();
   const response = await api(`/api/clips/${clip.id}`, {
     method: "PATCH",
     token: aliceToken,
-    json: { title: "  Nouveau titre ", tags: ["Western"], visibility: "public", sharedWith: [String(BOB)] },
+    json: { title: "  Nouveau titre ", tags: ["Western"], visibility: "public", sharedWith: [] },
   });
   assert.equal(response.status, 200);
   const updated = await response.json();
@@ -642,6 +651,8 @@ test("PATCH hors contrat = 400 sans modification", async () => {
     [{ tags: ["a", "b", "c", "d", "e", "f"] }, /Étiquettes limitées/],
     [{ tags: "noir" }, /Étiquettes invalides/],
     [{ visibility: "friends" }, /Visibilité invalide/],
+    [{ sharedWith: "bob" }, /Partage invalide/],
+    [{ sharedWith: ["pas-un-id"] }, /Partage invalide/],
     [["title"], /Corps JSON attendu/],
   ];
   for (const [json, pattern] of bodies) {
