@@ -1,0 +1,84 @@
+:host { display: block; }
+
+.page { display: grid; gap: var(--space-4); }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: start;
+  min-height: 2.75rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.back-link svg { width: 1.25rem; height: 1.25rem; }
+.back-link:hover { text-decoration: underline; }
+
+.hero { margin-bottom: 0; }
+.hero h1 { margin: var(--space-2) 0; overflow-wrap: anywhere; }
+.hero .meta { margin: 0; opacity: 0.9; overflow-wrap: anywhere; }
+
+.card h2 { margin: 0 0 var(--space-3); font-size: 1.25rem; }
+.card .hint { margin: 0 0 var(--space-3); }
+
+.status { margin: 0 0 var(--space-3); color: var(--text-muted); }
+.skeleton-title { height: 2rem; width: 50%; margin-bottom: var(--space-4); }
+.skeleton-video { aspect-ratio: 16 / 9; }
+
+.error-title { margin: 0 0 var(--space-3); font-size: 1.5rem; }
+
+.video-frame {
+  overflow: hidden;
+  background: var(--brand-deep);
+  border-radius: var(--radius-md);
+}
+
+.video-frame video { display: block; width: 100%; max-height: 70vh; background: var(--brand-deep); }
+
+.video-placeholder {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  padding: var(--space-4);
+}
+
+.video-placeholder .alert { margin: 0; }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.position {
+  display: grid;
+  justify-items: center;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.position-time { font-size: 1.25rem; font-weight: 700; }
+.position-shot { font-size: 0.875rem; color: var(--text-muted); }
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.stat { display: grid; gap: var(--space-1); align-content: start; padding: var(--space-4); }
+.stat dt { font-size: 0.875rem; font-weight: 600; color: var(--text-muted); }
+.stat dd { margin: 0; }
+.stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1.2; color: var(--brand-strong); font-variant-numeric: tabular-nums; }
+.stat-hint { font-size: 0.875rem; color: var(--text); }
+
+@media (max-width: 720px) {
+  .controls { justify-content: center; }
+  .controls button { flex: 1 1 10rem; }
+  .position { order: -1; flex-basis: 100%; }
+}

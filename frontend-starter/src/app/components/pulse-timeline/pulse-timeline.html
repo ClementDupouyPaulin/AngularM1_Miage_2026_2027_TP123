@@ -1,0 +1,69 @@
+<div
+  class="timeline"
+  role="slider"
+  tabindex="0"
+  [attr.aria-label]="accessibleName()"
+  aria-valuemin="0"
+  [attr.aria-valuemax]="duration()"
+  [attr.aria-valuenow]="valueNow()"
+  [attr.aria-valuetext]="valueText()"
+  aria-orientation="horizontal"
+  (keydown)="onKeydown($event)"
+>
+  <div class="plot" #plot (click)="onPlotClick($event)" (mouseleave)="hoveredCut.set(null)">
+    <svg
+      class="chart"
+      [attr.viewBox]="viewBox"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect class="beat-band" x="0" [attr.y]="beatTop" [attr.width]="viewWidth" [attr.height]="beatBottom - beatTop" rx="4" />
+      @for (tick of ticks(); track tick.time) {
+        <line class="grid" [attr.x1]="tick.x" [attr.x2]="tick.x" y1="0" [attr.y2]="pulseBottom" />
+      }
+      <line class="baseline" x1="0" [attr.x2]="viewWidth" [attr.y1]="pulseBottom" [attr.y2]="pulseBottom" />
+      <path class="pulse-area" [attr.d]="areaPath()" />
+      <path class="pulse-line" [attr.d]="linePath()" />
+      @for (cut of cutMarks(); track cut.index) {
+        <line
+          class="cut"
+          [class.active]="hoveredCut() === cut.index"
+          [attr.x1]="cut.x"
+          [attr.x2]="cut.x"
+          y1="20"
+          [attr.y2]="pulseBottom"
+        />
+        <rect
+          class="cut-hit"
+          [attr.x]="cut.x - 6"
+          y="0"
+          width="12"
+          [attr.height]="pulseBottom"
+          (mouseenter)="hoveredCut.set(cut.index)"
+          (click)="onCutClick($event, cut.time)"
+        />
+      }
+      <path class="beats" [attr.d]="beatPath()" />
+    </svg>
+
+    <div class="cursor" [style.left.%]="cursorPercent()" aria-hidden="true"></div>
+
+    @if (hoveredLabel(); as hovered) {
+      <div class="tooltip" [style.left.%]="hovered.percent" aria-hidden="true">{{ hovered.text }}</div>
+    }
+  </div>
+
+  <div class="axis" aria-hidden="true">
+    @for (tick of ticks(); track tick.time) {
+      <span class="tick" [style.left.%]="tick.percent">{{ tick.label }}</span>
+    }
+  </div>
+</div>
+
+<ul class="legend" aria-label="Légende">
+  <li><span class="swatch swatch-pulse" aria-hidden="true"></span>Pouls (coupes par fenêtre de 5 s, pic {{ peakLabel() }})</li>
+  <li><span class="swatch swatch-cut" aria-hidden="true"></span>Coupe</li>
+  <li><span class="swatch swatch-beat" aria-hidden="true"></span>Beat de la bande-son</li>
+  <li><span class="swatch swatch-cursor" aria-hidden="true"></span>Lecture</li>
+</ul>

@@ -1,0 +1,98 @@
+<section class="page">
+  <a class="back-link" routerLink="/clips">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M15.4 6.6 14 5.2 7.2 12l6.8 6.8 1.4-1.4L10 12l5.4-5.4Z" fill="currentColor" />
+    </svg>
+    Retour à mes extraits
+  </a>
+
+  @if (loading()) {
+    <div class="card" aria-busy="true">
+      <p class="status" role="status">Chargement de l’extrait…</p>
+      <div class="skeleton skeleton-title"></div>
+      <div class="skeleton skeleton-video"></div>
+    </div>
+  } @else if (error()) {
+    <div class="card">
+      <h1 class="error-title">Extrait introuvable</h1>
+      <p class="alert alert-error" role="alert">{{ error() }}</p>
+    </div>
+  } @else if (clip(); as clip) {
+    <header class="hero">
+      <p class="eyebrow">Film Pulse · Extrait</p>
+      <h1>{{ clip.title }}</h1>
+      <p class="meta">{{ clip.originalName }} · ajouté le {{ clip.createdAt | date: 'dd/MM/yyyy' }}</p>
+    </header>
+
+    <section class="card player-card" aria-labelledby="player-heading">
+      <h2 id="player-heading">Lecture</h2>
+
+      <div class="video-frame">
+        @if (videoUrl()) {
+          <video
+            #player
+            controls
+            preload="metadata"
+            [src]="videoUrl()"
+            [attr.aria-label]="'Vidéo : ' + clip.title"
+            (timeupdate)="onTimeUpdate()"
+            (seeked)="onTimeUpdate()"
+          ></video>
+        } @else if (videoLoading()) {
+          <div class="video-placeholder skeleton" role="status">
+            <span class="visually-hidden">Chargement de la vidéo…</span>
+          </div>
+        } @else {
+          <div class="video-placeholder">
+            <p class="alert alert-error" role="alert">{{ videoError() }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="controls">
+        <button
+          type="button"
+          class="btn-secondary"
+          [disabled]="previousCutTime() === null && currentTime() === 0"
+          (click)="goToPreviousCut()"
+        >
+          ← Coupe précédente
+        </button>
+        <p class="position" aria-live="off">
+          <span class="position-time">{{ currentTimeLabel() }}</span>
+          <span class="position-shot">Plan {{ currentShot() }} / {{ clip.cutCount + 1 }}</span>
+        </p>
+        <button type="button" class="btn-secondary" [disabled]="nextCutTime() === null" (click)="goToNextCut()">
+          Coupe suivante →
+        </button>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="pulse-heading">
+      <h2 id="pulse-heading">Pouls du montage</h2>
+      <p class="hint">
+        Cliquez sur la courbe ou sur un pic pour sauter à l’instant correspondant ; au clavier, les flèches
+        avancent ou reculent d’une seconde.
+      </p>
+      <app-pulse-timeline
+        [analysis]="clip.analysis"
+        [currentTime]="currentTime()"
+        [label]="'Pouls du montage de « ' + clip.title + ' »'"
+        (seek)="seekTo($event)"
+      />
+    </section>
+
+    <section aria-labelledby="stats-heading">
+      <h2 id="stats-heading" class="visually-hidden">Statistiques</h2>
+      <dl class="stats">
+        @for (stat of stats(); track stat.label) {
+          <div class="card stat">
+            <dt>{{ stat.label }}</dt>
+            <dd class="stat-value">{{ stat.value }}</dd>
+            <dd class="stat-hint">{{ stat.hint }}</dd>
+          </div>
+        }
+      </dl>
+    </section>
+  }
+</section>
