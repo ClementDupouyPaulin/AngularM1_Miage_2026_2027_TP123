@@ -13,6 +13,7 @@ const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "gpc-clips-"));
 process.chdir(workDir);
 const { createApp } = await import("../src/app.js");
 const { Clip } = await import("../src/models/Clip.js");
+const { User } = await import("../src/models/User.js");
 
 mongoose.set("bufferCommands", false);
 
@@ -41,6 +42,18 @@ const validAnalysis = (overrides = {}) => ({
   ...overrides,
 });
 
+/** Analyse v1 normalisée en v2 : valeurs par défaut et coupes en transitions « cut ». */
+const asV2 = (analysis) => ({
+  ...analysis,
+  version: 2,
+  fps: 10,
+  diffs: [],
+  palette: [],
+  transitions: analysis.cuts.map((time) => ({ time, kind: "cut" })),
+  thumbnailTimes: [],
+  sensitivity: 3,
+});
+
 /* ---- Simulation de MongoDB : les méthodes du modèle lisent une Map. ---- */
 
 const store = new Map();
@@ -50,6 +63,9 @@ let failCreate = false;
 function fakeQuery(result) {
   return {
     select() {
+      return this;
+    },
+    lean() {
       return this;
     },
     then(resolve, reject) {
@@ -67,6 +83,10 @@ function findInStore(filter) {
   return doc;
 }
 
+User.find = () => fakeQuery([
+  { _id: ALICE, name: "Alice" },
+  { _id: BOB, name: "Bob" },
+]);
 Clip.findOne = (filter) => fakeQuery(findInStore(filter));
 Clip.findOneAndDelete = (filter) => {
   const doc = findInStore(filter);
@@ -97,7 +117,7 @@ mongoose.Aggregate.prototype.exec = async function exec() {
     .filter((doc) => !regex || regex.test(doc.title))
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((doc) => {
-      const row = doc.toObject();
+      const row = { ...doc.toObject(), hasFilmstrip: typeof doc.filmstripStoredName === "string" };
       for (const [key, value] of Object.entries(project)) if (value === 0) delete row[key];
       return row;
     });
@@ -215,7 +235,9 @@ test("upload MP4 : 201, statistiques recalculées et nom disque masqué", async 
   assert.equal(clip.cutCount, 3);
   assert.equal(clip.avgShotLength, 15);
   assert.equal(clip.syncScore, 0);
-  assert.deepEqual(clip.analysis, validAnalysis({ syncScore: 0 }));
+  assert.deepEqual(clip.analysis, asV2(validAnalysis({ syncScore: 0 })));
+  assert.deepEqual(clip.owner, { id: String(ALICE), name: "Alice" });
+  assert.equal(clip.isOwner, true);
   assert.equal("storedName" in clip, false);
   assert.equal(JSON.stringify(clip).includes(store.get(clip.id).storedName), false);
   assert.equal(diskFiles().length, 1);
@@ -346,7 +368,7 @@ test("syncScore fourni par un client qui triche : la valeur du serveur est stock
 
 /* ---- Liste ---- */
 
-test("liste paginée : résumés sans cuts/beats, ownerId casté, clips d'autrui exclus", async () => {
+test("liste paginée : résumés sans beats ni noms disque, ownerId casté, clips d'autrui exclus", async () => {
   for (let index = 0; index < 3; index += 1) {
     seedClip({ title: `Clip ${index}`, createdAt: new Date(2026, 0, index + 1) });
   }
@@ -369,14 +391,20 @@ test("liste paginée : résumés sans cuts/beats, ownerId casté, clips d'autrui
     "createdAt",
     "cutCount",
     "durationSec",
+    "hasFilmstrip",
     "id",
+    "isOwner",
     "mimeType",
     "originalName",
+    "owner",
     "size",
+    "sparkline",
     "syncScore",
+    "tags",
     "title",
+    "visibility",
   ]);
-  assert.match(JSON.stringify(pipelines[0]), /"\$project":\{"storedName":0,"cuts":0,"beats":0\}/);
+  assert.match(JSON.stringify(pipelines[0]), /"\$project":\{"storedName":0,"filmstripStoredName":0,"beats":0,/);
 });
 
 test("filtre q : sous-chaîne insensible à la casse, regex échappée", async () => {
@@ -404,13 +432,10 @@ test("détail : analyse renvoyée au propriétaire", async () => {
   assert.equal(response.status, 200);
   const clip = await response.json();
   assert.equal(clip.id, seeded.id);
-  assert.deepEqual(clip.analysis, {
-    version: 1,
-    durationSec: 30,
-    cuts: [5, 15],
-    beats: [1, 2],
-    syncScore: null,
-  });
+  assert.deepEqual(
+    clip.analysis,
+    asV2({ version: 1, durationSec: 30, cuts: [5, 15], beats: [1, 2], syncScore: null }),
+  );
   assert.equal("storedName" in clip, false);
 });
 

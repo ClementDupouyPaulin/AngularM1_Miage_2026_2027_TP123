@@ -20,11 +20,18 @@ Le contrat HTTP ne dépend pas du choix de persistance : le backend fourni utili
 | DELETE | `/tracks/:id/cover` | JWT | `204` |
 | GET | `/tracks/:id/cover/search` | JWT | `200 CoverSearch` |
 | POST | `/tracks/:id/cover/web` | `{ "imageUrl": "https://…" }` + JWT | `200 Track` (`coverSource: "web"`) |
-| GET | `/clips?page=1&limit=5&q=poursuite` | JWT | `Page<ClipSummary>` |
-| POST | `/clips` | multipart : `video`, `title` (optionnel), `analysis` (JSON texte) + JWT | `201 Clip` |
+| GET | `/clips?page=1&limit=5&q=poursuite&tag=action&visibility=public` | JWT | `Page<ClipSummary>` (mes clips) |
+| POST | `/clips` | multipart : `video`, `title` (optionnel), `analysis` (JSON texte v2, v1 acceptée), `filmstrip` (JPEG ≤ 1 Mo, optionnel), `tags` (JSON `string[]`, optionnel), `visibility` (optionnel, défaut `private`) + JWT | `201 Clip` |
+| GET | `/clips/stats` | JWT | `200 LibraryStats` |
+| GET | `/clips/tags` | JWT | `200 TagCount[]` (mes étiquettes) |
 | GET | `/clips/:id` | JWT | `200 Clip` |
 | GET | `/clips/:id/video` | JWT | flux vidéo (`Content-Type` vérifié) |
-| DELETE | `/clips/:id` | JWT | `204` (supprime aussi le fichier vidéo) |
+| GET | `/clips/:id/filmstrip` | JWT | `200` `image/jpeg` |
+| PATCH | `/clips/:id` | `ClipPatch` JSON + JWT (propriétaire) | `200 Clip` |
+| PUT | `/clips/:id/analysis` | analyse JSON (v2 ou v1) + JWT (propriétaire) | `200 Clip` |
+| DELETE | `/clips/:id` | JWT (propriétaire) | `204` (supprime vidéo, pellicule et annotations) |
+| POST | `/clips/:id/annotations` | `{time, text}` + JWT (lecteur du clip) | `201 ClipAnnotation` |
+| DELETE | `/clips/:id/annotations/:annotationId` | JWT (auteur ou propriétaire) | `204` |
 
 `Track` : `id`, `ownerId`, `title`, `originalName`, `mimeType`, `size`, `createdAt`, `artist` et `album` (`string | null`), `hasCover` (booléen), `coverSource` (`"upload" | "id3" | "web" | null`). Les noms de fichiers sur disque ne sont jamais renvoyés.
 
@@ -42,12 +49,24 @@ Erreurs courantes : `400` validation (fichier manquant, format refusé, `q` > 10
 
 ## Film Pulse : `/clips`
 
-`ClipSummary` : `id`, `title`, `originalName`, `mimeType` (`"video/mp4" | "video/webm"`), `size`, `durationSec`, `cutCount`, `avgShotLength` (secondes), `syncScore` (`number | null`), `createdAt`. `Clip` = `ClipSummary` + `analysis`. Les noms de fichiers sur disque ne sont jamais renvoyés.
+Lecture d'un clip : réservée pour l'instant à son propriétaire (la visibilité et le partage élargiront cette règle). Tout clip illisible répond `404 "Clip inconnu"`. Seul le propriétaire modifie (`PATCH`, `PUT analysis`) ou supprime. Les noms de fichiers sur disque (vidéo, pellicule) ne sont jamais renvoyés ; les fichiers restent à plat dans `data/uploads`.
 
-`analysis` = `{ "version": 1, "durationSec": number, "cuts": number[], "beats": number[], "syncScore": number | null }`, calculée par le navigateur et validée strictement par le serveur : aucun autre champ, `version` égale à 1, `durationSec` dans `]0, 120]`, `cuts` et `beats` tableaux de 2000 nombres finis maximum, triés par ordre croissant et compris dans `[0, durationSec]`, `syncScore` nul ou nombre fini dans `[0, 10]` (accepté pour la compatibilité du contrat, mais **ignoré** : le serveur le recalcule à partir de `cuts`, `beats` et `durationSec`, fenêtre ±0,08 s, part de coupes proches d'un beat rapportée à la part attendue au hasard, plafonné à 10, `null` sans coupe, sans beat ou si la durée est nulle ; la valeur stockée et renvoyée est celle du serveur). `durationSec` est **déclarative** : le serveur ne sonde pas la vidéo (pas de ffprobe), la limite de 120 s est une borne de confiance et la taille de 50 Mo est la vraie limite imposée. `cutCount` (= nombre de coupes) et `avgShotLength` (= `durationSec / (cutCount + 1)`) sont **recalculés côté serveur** ; ils ne sont pas acceptés dans `analysis`.
+`ClipSummary` : `id`, `title`, `originalName`, `mimeType` (`"video/mp4" | "video/webm"`), `size`, `durationSec`, `cutCount`, `avgShotLength` (secondes), `syncScore` (`number | null`), `createdAt`, `tags` (`string[]`), `visibility` (`"private" | "shared" | "public"`), `owner` (`{id, name}`), `isOwner` (booléen), `hasFilmstrip` (booléen), `sparkline` (24 entiers : nombre de coupes par tranche de durée égale, recalculé à chaque lecture). `Clip` = `ClipSummary` + `analysis` + `annotations` (`ClipAnnotation[]` triées par `time`) + `sharedWith` (`{id, name}[]`, renseigné seulement pour le propriétaire, sinon `[]`). `ClipAnnotation` : `id`, `time`, `text`, `authorId`, `authorName`, `createdAt`.
 
-Vidéos acceptées : MP4 ou WebM, 50 Mo maximum ; le `Content-Type` déclaré doit correspondre aux octets du fichier (boîte `ftyp` pour MP4, en-tête EBML `1A 45 DF A3` pour WebM). Sans `title`, le nom du fichier sert de repli (200 caractères maximum). Tout refus après réception supprime le fichier du disque.
+`analysis` v2 = `{ version: 2, durationSec, fps, cuts, beats, syncScore, diffs, palette, transitions, thumbnailTimes, sensitivity }`, calculée par le navigateur et validée strictement : toutes les clés requises et aucune autre ; `durationSec` dans `]0, 120]` ; `fps` dans `[1, 30]` ; `cuts` et `beats` 2000 nombres finis maximum, triés et compris dans `[0, durationSec]` ; `diffs` 1300 valeurs maximum dans `[0, 1]` ; `palette` 130 couleurs `#rrggbb` maximum (stockées en minuscules) ; `transitions` 2000 objets `{time, kind}` maximum (`kind` : `"cut" | "fade"`), triés par `time` dans `[0, durationSec]` ; `thumbnailTimes` 41 temps maximum, triés dans `[0, durationSec]` ; `sensitivity` dans `[1, 6]` ; `syncScore` nul ou dans `[0, 10]`. L'analyse v1 (`{ version: 1, durationSec, cuts, beats, syncScore }`, mêmes règles) reste acceptée et convertie en v2. Un ancien clip v1 est normalisé à la lecture : `fps` 10, `diffs` `[]`, `palette` `[]`, `transitions` = chaque coupe en `"cut"`, `thumbnailTimes` `[]`, `sensitivity` 3 ; la réponse porte toujours `version: 2`.
 
-`Page<ClipSummary>` suit les mêmes règles que `Page<Track>` (`page`, `limit` 1 à 20, `q` sur le titre, littéral, 100 caractères maximum, tri `createdAt` décroissant).
+`syncScore`, `cutCount` (= nombre de coupes), `avgShotLength` (= `durationSec / (cutCount + 1)`) et `sparkline` sont **toujours recalculés côté serveur** ; `syncScore` reçu est ignoré (fenêtre ±0,08 s, part de coupes proches d'un beat rapportée à la part attendue au hasard, plafonné à 10, `null` sans coupe ou sans beat). `durationSec` est **déclarative** : le serveur ne sonde pas la vidéo (pas de ffprobe), la limite de 120 s est une borne de confiance et la taille de 50 Mo est la vraie limite imposée.
 
-Erreurs : `400` (vidéo manquante, format refusé, octets non conformes, vidéo trop lourde, `analysis` manquante ou invalide, `q` > 100 caractères), `401` authentification, `404` `"Clip inconnu"` (inexistant, d'autrui, identifiant invalide ou fichier vidéo absent du disque), `500` si la métadonnée est supprimée mais pas le fichier vidéo. Corps d'erreur : `{ "message": "..." }`.
+Vidéos acceptées : MP4 ou WebM, 50 Mo maximum ; le `Content-Type` déclaré doit correspondre aux octets du fichier (boîte `ftyp` pour MP4, en-tête EBML `1A 45 DF A3` pour WebM). Pellicule (`filmstrip`, optionnelle) : JPEG de 1 Mo maximum, vérifié sur ses octets (`FF D8 FF`), servi par `GET /clips/:id/filmstrip` en `image/jpeg` avec `X-Content-Type-Options: nosniff`. Sans `title`, le nom du fichier sert de repli (200 caractères maximum). Tout refus après réception supprime la vidéo et la pellicule du disque.
+
+Étiquettes : 5 maximum, chacune rognée et mise en minuscules, 1 à 24 caractères sans caractère de contrôle ; les doublons sont fusionnés. `GET /clips/tags` renvoie `TagCount[]` = `{tag, count}[]` triés par `count` décroissant puis par ordre alphabétique.
+
+`PATCH /clips/:id` accepte `ClipPatch` = `{ title?, tags?, visibility?, sharedWith? }` (aucune autre clé) ; `title` rogné de 1 à 200 caractères. `sharedWith` est accepté mais **pas encore appliqué** (partage à venir). `PUT /clips/:id/analysis` remplace toute l'analyse (coupes, transitions, sensibilité, `diffs`…) avec la même validation que l'upload ; `durationSec` doit être celle du clip ; les annotations sont conservées ; corps JSON de 1 Mo maximum.
+
+Annotations : `POST /clips/:id/annotations` avec `{time, text}` (aucune autre clé), `time` dans `[0, durationSec]`, `text` rogné de 1 à 280 caractères, 200 annotations maximum par clip. `DELETE /clips/:id/annotations/:annotationId` est réservé à l'auteur de l'annotation ou au propriétaire du clip.
+
+`LibraryStats` (`GET /clips/stats`, mes clips) : `clipCount`, `totalDurationSec`, `totalCuts`, `avgShotLength` (durée totale / nombre total de plans, `null` sans clip), `mostNervous` (`ClipSummary` au plus petit `avgShotLength`), `mostSynced` (`ClipSummary` au plus grand `syncScore` non nul), `null` sans candidat ; à égalité le plus récent l'emporte ; `byVisibility` = `{private, shared, public}` (un ancien clip sans visibilité compte comme `private`).
+
+`Page<ClipSummary>` suit les mêmes règles que `Page<Track>` (`page`, `limit` 1 à 20, `q` sur le titre, littéral, 100 caractères maximum, tri `createdAt` décroissant). Filtres optionnels : `tag` (une étiquette, comparée en minuscules) et `visibility` (`private`, `shared` ou `public`).
+
+Erreurs : `400` (vidéo manquante, format refusé, octets non conformes, vidéo trop lourde, pellicule invalide ou de plus de 1 Mo, `analysis` manquante ou invalide, durée différente au `PUT`, étiquettes, visibilité, titre, annotation ou filtre invalides, limite de 200 annotations atteinte, champ inattendu, corps JSON invalide), `401` authentification, `403` suppression d'une annotation par un lecteur qui n'en est ni l'auteur ni le propriétaire du clip, `404` `"Clip inconnu"` (inexistant, illisible, identifiant invalide ou fichier vidéo absent du disque), `404` `"Pellicule absente"` (pas de pellicule ou fichier absent), `404` `"Annotation inconnue"`, `413` corps JSON trop volumineux, `500` si la métadonnée est supprimée mais pas un fichier du clip. Corps d'erreur : `{ "message": "..." }`.

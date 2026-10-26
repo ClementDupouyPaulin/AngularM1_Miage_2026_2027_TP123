@@ -10,7 +10,23 @@ import mongoose from "mongoose";
 import { parseFile, selectCover } from "music-metadata";
 import { User } from "./models/User.js";
 import { Track, toPublicTrack, TAG_MAX_LENGTH } from "./models/Track.js";
-import { Clip, toPublicClip, ANALYSIS_VERSION } from "./models/Clip.js";
+import {
+  Clip,
+  toPublicClip,
+  toPublicAnnotation,
+  clipUserIds,
+  ANALYSIS_VERSION,
+  LEGACY_ANALYSIS_VERSION,
+  DEFAULT_FPS,
+  DEFAULT_SENSITIVITY,
+  CLIP_TITLE_MAX_LENGTH,
+  CLIP_VISIBILITIES,
+  TRANSITION_KINDS,
+  CLIP_TAG_MAX_COUNT,
+  CLIP_TAG_MAX_LENGTH,
+  ANNOTATION_TEXT_MAX_LENGTH,
+  MAX_ANNOTATIONS,
+} from "./models/Clip.js";
 
 // Les fichiers audio restent sur le disque du serveur dans ce TP.
 // MongoDB ne conserve que leurs métadonnées : titre, nom, taille, etc.
@@ -76,7 +92,51 @@ const MAX_CLIP_DURATION_SEC = 120;
 const MAX_ANALYSIS_POINTS = 2000;
 const MAX_SYNC_SCORE = 10;
 const SYNC_WINDOW_SEC = 0.08;
-const ANALYSIS_KEYS = ["version", "durationSec", "cuts", "beats", "syncScore"];
+const ANALYSIS_V1_KEYS = ["version", "durationSec", "cuts", "beats", "syncScore"];
+const ANALYSIS_KEYS_BY_VERSION = new Map([
+  [LEGACY_ANALYSIS_VERSION, ANALYSIS_V1_KEYS],
+  [
+    ANALYSIS_VERSION,
+    [...ANALYSIS_V1_KEYS, "fps", "diffs", "palette", "transitions", "thumbnailTimes", "sensitivity"],
+  ],
+]);
+const MAX_DIFFS = 1300;
+const MAX_PALETTE_COLORS = 130;
+const MAX_THUMBNAILS = 41;
+const MIN_FPS = 1;
+const MAX_FPS = 30;
+const MIN_SENSITIVITY = 1;
+const MAX_SENSITIVITY = 6;
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+// Tolérance de comparaison des durées (s) entre l'analyse retouchée et le clip.
+const DURATION_TOLERANCE_SEC = 1e-6;
+// Une analyse v2 complète (2000 coupes, beats et transitions) dépasse les 100 ko par défaut.
+const ANALYSIS_BODY_LIMIT = "1mb";
+const MAX_FILMSTRIP_SIZE = 1024 * 1024;
+const FILMSTRIP_TOO_LARGE = "Pellicule trop volumineuse (1 Mo maximum)";
+const JPEG_SIGNATURE_LENGTH = 3;
+const CONTROL_CHARACTERS = /\p{Cc}/u;
+// Les noms de stockage sont masqués par défaut : seules les routes clips les lisent.
+const CLIP_HIDDEN_FIELDS = "+storedName +filmstripStoredName";
+// Champs lourds inutiles aux résumés ; cuts reste lu pour la mini-courbe.
+const CLIP_SUMMARY_EXCLUDED = [
+  "storedName",
+  "filmstripStoredName",
+  "beats",
+  "diffs",
+  "palette",
+  "transitions",
+  "thumbnailTimes",
+  "annotations",
+  "sharedWith",
+];
+// Pour les statistiques : mêmes exclusions, mais le nom de pellicule donne hasFilmstrip.
+const CLIP_STATS_SELECT = [
+  ...CLIP_SUMMARY_EXCLUDED.filter((field) => field !== "filmstripStoredName").map((field) => `-${field}`),
+  "+filmstripStoredName",
+].join(" ");
+const CLIP_PATCH_KEYS =["title", "tags", "visibility", "sharedWith"];
+const ANNOTATION_KEYS = ["time", "text"];
 
 const COVER_ATTRIBUTION =
   "Pochettes fournies par l'API iTunes Search d'Apple ; elles restent la propriété de leurs ayants droit.";
@@ -207,10 +267,26 @@ async function replaceCover(track, cover) {
   if (previous) await removeFile(path.join(COVERS, previous));
 }
 
+/**
+ * Règle de lecture d'un clip. Pour l'instant seul le propriétaire lit ses
+ * clips ; la visibilité et le partage élargiront cette règle.
+ */
+async function canReadClip(clip, userId) {
+  return String(clip.ownerId) === String(userId);
+}
+
+/** Retrouve un clip lisible par l'utilisateur connecté (null sinon). */
+async function findReadableClip(req) {
+  if (!mongoose.isValidObjectId(req.params.id)) return null;
+  const clip = await Clip.findOne({ _id: req.params.id }).select(CLIP_HIDDEN_FIELDS);
+  if (!clip || !(await canReadClip(clip, req.auth.sub))) return null;
+  return clip;
+}
+
 /** Retrouve un clip du propriétaire connecté (null si inconnu ou d'autrui). */
 async function findOwnedClip(req) {
   if (!mongoose.isValidObjectId(req.params.id)) return null;
-  return Clip.findOne({ _id: req.params.id, ownerId: req.auth.sub }).select("+storedName");
+  return Clip.findOne({ _id: req.params.id, ownerId: req.auth.sub }).select(CLIP_HIDDEN_FIELDS);
 }
 
 function unknownClip(req, res) {
@@ -218,37 +294,166 @@ function unknownClip(req, res) {
   return res.status(404).json({ message: "Clip inconnu" });
 }
 
-/** Identifie MP4 (boîte `ftyp`) ou WebM (en-tête EBML) par les premiers octets du fichier. */
-async function detectVideoType(filePath) {
+/** Associe chaque identifiant d'utilisateur à son nom public. */
+async function loadUserNames(ids) {
+  const unique = [...new Set(ids.map(String))].filter((id) => mongoose.isValidObjectId(id));
+  if (unique.length === 0) return new Map();
+  const users = await User.find({ _id: { $in: unique } }).select("name").lean();
+  return new Map(users.map((user) => [String(user._id), user.name]));
+}
+
+/** Détail public d'un clip vu par l'utilisateur connecté. */
+async function publicClip(req, clip) {
+  const userNames = await loadUserNames(clipUserIds(clip));
+  return clip.toPublic({ viewerId: req.auth.sub, userNames });
+}
+
+/** Résumés publics d'une liste de clips (documents ou objets bruts). */
+async function publicSummaries(req, clips) {
+  const userNames = await loadUserNames(clips.map((clip) => clip.ownerId));
+  return clips.map((clip) => toPublicClip(clip, { viewerId: req.auth.sub, userNames }));
+}
+
+/** Chemins disque des fichiers d'un clip (vidéo et pellicule éventuelle). */
+const clipFilePaths = (clip) =>
+  [clip.storedName, clip.filmstripStoredName].filter(Boolean).map((name) => path.join(UPLOADS, name));
+
+/**
+ * Envoie un fichier d'un clip avec son type et nosniff ; un fichier absent du
+ * disque donne un 404 JSON au lieu d'un 500.
+ */
+function sendClipFile(res, next, { clipId, storedName, mimeType, missingMessage }) {
+  res.type(mimeType);
+  res.set("X-Content-Type-Options", "nosniff");
+  res.sendFile(path.join(UPLOADS, storedName), (error) => {
+    if (error) {
+      console.error(`[clips] Erreur d'envoi du fichier ${mimeType} du clip ${clipId}`, error);
+      if (error.code === "ENOENT" && !res.headersSent) {
+        res.removeHeader("Content-Type");
+        res.removeHeader("X-Content-Type-Options");
+        return res.status(404).json({ message: missingMessage });
+      }
+      if (!res.headersSent) next(error);
+      return;
+    }
+    console.log(`[clips] Fichier ${mimeType} envoyé : ${clipId}`);
+  });
+}
+
+/** Lit les premiers octets d'un fichier pour en vérifier la signature. */
+async function readFileHead(filePath, length) {
   const handle = await fsPromises.open(filePath, "r");
   try {
-    const bytes = Buffer.alloc(VIDEO_SIGNATURE_LENGTH);
-    const { bytesRead } = await handle.read(bytes, 0, VIDEO_SIGNATURE_LENGTH, 0);
-    if (bytesRead >= 8 && bytes.toString("latin1", 4, 8) === "ftyp") return "video/mp4";
-    if (bytes.subarray(0, WEBM_SIGNATURE.length).equals(WEBM_SIGNATURE)) return "video/webm";
-    return null;
+    const bytes = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(bytes, 0, length, 0);
+    return bytes.subarray(0, bytesRead);
   } finally {
     await handle.close();
   }
 }
 
+/** Identifie MP4 (boîte `ftyp`) ou WebM (en-tête EBML) par les premiers octets du fichier. */
+async function detectVideoType(filePath) {
+  const bytes = await readFileHead(filePath, VIDEO_SIGNATURE_LENGTH);
+  if (bytes.length >= 8 && bytes.toString("latin1", 4, 8) === "ftyp") return "video/mp4";
+  if (bytes.subarray(0, WEBM_SIGNATURE.length).equals(WEBM_SIGNATURE)) return "video/webm";
+  return null;
+}
+
+/** Refuse une pellicule trop lourde ou dont les octets ne sont pas ceux d'un JPEG. */
+async function checkFilmstrip(file) {
+  if (file.size > MAX_FILMSTRIP_SIZE) throw new HttpError(400, FILMSTRIP_TOO_LARGE);
+  const bytes = await readFileHead(file.path, JPEG_SIGNATURE_LENGTH);
+  if (bytes.length < JPEG_SIGNATURE_LENGTH || detectImageType(bytes) !== "image/jpeg") {
+    throw new HttpError(400, "Pellicule invalide : JPEG attendu");
+  }
+}
+
+const isPlainObject = (value) =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isFiniteInRange = (value, min, max) =>
+  typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+
 /** Vérifie qu'un tableau de temps est court, fini, trié et compris dans [0, durée]. */
-function validateTimes(values, durationSec, name) {
-  if (!Array.isArray(values) || values.length > MAX_ANALYSIS_POINTS) {
-    throw new HttpError(400, `Analyse invalide : ${name} doit être un tableau de ${MAX_ANALYSIS_POINTS} valeurs maximum`);
+function validateTimes(values, durationSec, name, maxLength = MAX_ANALYSIS_POINTS) {
+  if (!Array.isArray(values) || values.length > maxLength) {
+    throw new HttpError(400, `Analyse invalide : ${name} doit être un tableau de ${maxLength} valeurs maximum`);
   }
   values.forEach((value, index) => {
     const valid =
-      typeof value === "number" &&
-      Number.isFinite(value) &&
-      value >= 0 &&
-      value <= durationSec &&
-      (index === 0 || value >= values[index - 1]);
+      isFiniteInRange(value, 0, durationSec) && (index === 0 || value >= values[index - 1]);
     if (!valid) {
       throw new HttpError(400, `Analyse invalide : ${name} doit contenir des temps triés dans [0, durée]`);
     }
   });
   return values;
+}
+
+function validateDiffs(values) {
+  if (!Array.isArray(values) || values.length > MAX_DIFFS) {
+    throw new HttpError(400, `Analyse invalide : diffs doit être un tableau de ${MAX_DIFFS} valeurs maximum`);
+  }
+  if (!values.every((value) => isFiniteInRange(value, 0, 1))) {
+    throw new HttpError(400, "Analyse invalide : diffs doit contenir des valeurs dans [0, 1]");
+  }
+  return values;
+}
+
+function validatePalette(values) {
+  if (!Array.isArray(values) || values.length > MAX_PALETTE_COLORS) {
+    throw new HttpError(400, `Analyse invalide : palette doit contenir ${MAX_PALETTE_COLORS} couleurs maximum`);
+  }
+  if (!values.every((value) => typeof value === "string" && HEX_COLOR.test(value))) {
+    throw new HttpError(400, "Analyse invalide : palette doit contenir des couleurs #rrggbb");
+  }
+  return values.map((value) => value.toLowerCase());
+}
+
+function validateTransitions(values, durationSec) {
+  if (!Array.isArray(values) || values.length > MAX_ANALYSIS_POINTS) {
+    throw new HttpError(400, `Analyse invalide : transitions doit être un tableau de ${MAX_ANALYSIS_POINTS} valeurs maximum`);
+  }
+  values.forEach((transition, index) => {
+    const valid =
+      isPlainObject(transition) &&
+      Object.keys(transition).length === 2 &&
+      TRANSITION_KINDS.includes(transition.kind) &&
+      isFiniteInRange(transition.time, 0, durationSec) &&
+      (index === 0 || transition.time >= values[index - 1].time);
+    if (!valid) {
+      throw new HttpError(400, "Analyse invalide : transitions doit contenir des {time, kind} triés dans [0, durée]");
+    }
+  });
+  return values.map(({ time, kind }) => ({ time, kind }));
+}
+
+/** Valeurs par défaut d'une analyse v1 convertie en v2 à l'écriture. */
+const legacyAnalysisFields = (cuts) => ({
+  fps: DEFAULT_FPS,
+  diffs: [],
+  palette: [],
+  transitions: cuts.map((time) => ({ time, kind: "cut" })),
+  thumbnailTimes: [],
+  sensitivity: DEFAULT_SENSITIVITY,
+});
+
+function validateAnalysisV2Fields(analysis) {
+  const { durationSec, fps, sensitivity } = analysis;
+  if (!isFiniteInRange(fps, MIN_FPS, MAX_FPS)) {
+    throw new HttpError(400, `Analyse invalide : fps entre ${MIN_FPS} et ${MAX_FPS} attendu`);
+  }
+  if (!isFiniteInRange(sensitivity, MIN_SENSITIVITY, MAX_SENSITIVITY)) {
+    throw new HttpError(400, `Analyse invalide : sensitivity entre ${MIN_SENSITIVITY} et ${MAX_SENSITIVITY} attendue`);
+  }
+  return {
+    fps,
+    diffs: validateDiffs(analysis.diffs),
+    palette: validatePalette(analysis.palette),
+    transitions: validateTransitions(analysis.transitions, durationSec),
+    thumbnailTimes: validateTimes(analysis.thumbnailTimes, durationSec, "thumbnailTimes", MAX_THUMBNAILS),
+    sensitivity,
+  };
 }
 
 /** Durée totale (s) de l'union des fenêtres [b - w, b + w] bornées à [0, durée]. */
@@ -280,54 +485,235 @@ function computeSyncScore(cuts, beats, durationSec, windowSec = SYNC_WINDOW_SEC)
   return Math.min(MAX_SYNC_SCORE, hitRate / chanceRate);
 }
 
-/** Analyse le champ texte `analysis` ; toute valeur hors contrat est refusée. */
-function parseAnalysis(raw) {
+/** Lit le champ texte multipart `analysis` (JSON). */
+function readAnalysisField(raw) {
   if (typeof raw !== "string" || !raw) throw new HttpError(400, "Analyse requise");
-  let analysis;
   try {
-    analysis = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch {
     throw new HttpError(400, "Analyse invalide : JSON attendu");
   }
-  if (typeof analysis !== "object" || analysis === null || Array.isArray(analysis)) {
-    throw new HttpError(400, "Analyse invalide : objet attendu");
-  }
-  if (Object.keys(analysis).some((key) => !ANALYSIS_KEYS.includes(key))) {
+}
+
+/**
+ * Valide une analyse v1 ou v2 (clés connues, toutes requises, bornes, tri)
+ * et renvoie les champs à stocker, toujours au format v2. Les statistiques
+ * (syncScore, cutCount, avgShotLength) sont recalculées ici.
+ */
+function validateAnalysis(analysis) {
+  if (!isPlainObject(analysis)) throw new HttpError(400, "Analyse invalide : objet attendu");
+  const keys = ANALYSIS_KEYS_BY_VERSION.get(analysis.version);
+  if (!keys) throw new HttpError(400, "Analyse invalide : version non prise en charge");
+  if (Object.keys(analysis).some((key) => !keys.includes(key))) {
     throw new HttpError(400, "Analyse invalide : champ inattendu");
   }
-  if (analysis.version !== ANALYSIS_VERSION) {
-    throw new HttpError(400, "Analyse invalide : version non prise en charge");
-  }
+  const missing = keys.find((key) => !Object.hasOwn(analysis, key));
+  if (missing) throw new HttpError(400, `Analyse invalide : champ ${missing} requis`);
 
   const { durationSec, syncScore } = analysis;
-  if (
-    typeof durationSec !== "number" ||
-    !Number.isFinite(durationSec) ||
-    durationSec <= 0 ||
-    durationSec > MAX_CLIP_DURATION_SEC
-  ) {
+  if (!isFiniteInRange(durationSec, 0, MAX_CLIP_DURATION_SEC) || durationSec === 0) {
     throw new HttpError(400, `Analyse invalide : durée entre 0 et ${MAX_CLIP_DURATION_SEC} s attendue`);
   }
-  const syncScoreValid =
-    syncScore === null ||
-    (typeof syncScore === "number" &&
-      Number.isFinite(syncScore) &&
-      syncScore >= 0 &&
-      syncScore <= MAX_SYNC_SCORE);
-  if (!syncScoreValid) {
+  if (syncScore !== null && !isFiniteInRange(syncScore, 0, MAX_SYNC_SCORE)) {
     throw new HttpError(400, `Analyse invalide : syncScore entre 0 et ${MAX_SYNC_SCORE} ou null attendu`);
   }
 
   const cuts = validateTimes(analysis.cuts, durationSec, "cuts");
   const beats = validateTimes(analysis.beats, durationSec, "beats");
+  const v2Fields =
+    analysis.version === ANALYSIS_VERSION
+      ? validateAnalysisV2Fields(analysis)
+      : legacyAnalysisFields(cuts);
   return {
+    analysisVersion: ANALYSIS_VERSION,
     durationSec,
     cuts,
     beats,
+    ...v2Fields,
     syncScore: computeSyncScore(cuts, beats, durationSec),
     cutCount: cuts.length,
     avgShotLength: durationSec / (cuts.length + 1),
   };
+}
+
+/** Normalise une étiquette (rognée, minuscules) ; null si elle est hors contrat. */
+function normalizeTag(value) {
+  if (typeof value !== "string") return null;
+  const tag = value.trim().toLowerCase();
+  const valid = tag.length >= 1 && tag.length <= CLIP_TAG_MAX_LENGTH && !CONTROL_CHARACTERS.test(tag);
+  return valid ? tag : null;
+}
+
+/** Valide une liste d'étiquettes : doublons retirés, 5 maximum. */
+function validateTags(values) {
+  if (!Array.isArray(values)) throw new HttpError(400, "Étiquettes invalides : tableau attendu");
+  const tags = [];
+  for (const value of values) {
+    const tag = normalizeTag(value);
+    if (!tag) {
+      throw new HttpError(400, `Étiquette invalide : 1 à ${CLIP_TAG_MAX_LENGTH} caractères attendus`);
+    }
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  if (tags.length > CLIP_TAG_MAX_COUNT) {
+    throw new HttpError(400, `Étiquettes limitées à ${CLIP_TAG_MAX_COUNT}`);
+  }
+  return tags;
+}
+
+/** Lit le champ multipart optionnel `tags` (JSON `string[]`). */
+function readTagsField(raw) {
+  if (raw === undefined || raw === "") return [];
+  if (typeof raw !== "string") throw new HttpError(400, "Étiquettes invalides : tableau JSON attendu");
+  let tags;
+  try {
+    tags = JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, "Étiquettes invalides : tableau JSON attendu");
+  }
+  return validateTags(tags);
+}
+
+function validateVisibility(value) {
+  if (!CLIP_VISIBILITIES.includes(value)) {
+    throw new HttpError(400, "Visibilité invalide : private, shared ou public attendu");
+  }
+  return value;
+}
+
+function validateTitle(value) {
+  const title = typeof value === "string" ? value.trim() : "";
+  if (!title || title.length > CLIP_TITLE_MAX_LENGTH) {
+    throw new HttpError(400, `Titre invalide : 1 à ${CLIP_TITLE_MAX_LENGTH} caractères attendus`);
+  }
+  return title;
+}
+
+/** Valide un `ClipPatch` ; `sharedWith` est accepté mais pas encore appliqué. */
+function parseClipPatch(body) {
+  if (!isPlainObject(body)) throw new HttpError(400, "Corps JSON attendu");
+  if (Object.keys(body).some((key) => !CLIP_PATCH_KEYS.includes(key))) {
+    throw new HttpError(400, "Modification invalide : champ inattendu");
+  }
+  const changes = {};
+  if (Object.hasOwn(body, "title")) changes.title = validateTitle(body.title);
+  if (Object.hasOwn(body, "tags")) changes.tags = validateTags(body.tags);
+  if (Object.hasOwn(body, "visibility")) changes.visibility = validateVisibility(body.visibility);
+  return changes;
+}
+
+/** Valide `{time, text}` d'une annotation ; `time` doit tomber dans le clip. */
+function parseAnnotation(body, durationSec) {
+  if (!isPlainObject(body)) throw new HttpError(400, "Corps JSON attendu");
+  if (Object.keys(body).some((key) => !ANNOTATION_KEYS.includes(key))) {
+    throw new HttpError(400, "Annotation invalide : champ inattendu");
+  }
+  if (!isFiniteInRange(body.time, 0, durationSec)) {
+    throw new HttpError(400, "Annotation invalide : temps dans [0, durée] attendu");
+  }
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text || text.length > ANNOTATION_TEXT_MAX_LENGTH) {
+    throw new HttpError(400, `Annotation invalide : texte de 1 à ${ANNOTATION_TEXT_MAX_LENGTH} caractères attendu`);
+  }
+  return { time: body.time, text };
+}
+
+/** Filtres de liste `q`, `tag` et `visibility`, validés avant toute requête MongoDB. */
+function parseClipFilters(query) {
+  const rawSearch = query.q ?? "";
+  if (typeof rawSearch !== "string") throw new HttpError(400, "Paramètre de recherche invalide");
+  const search = rawSearch.trim();
+  if (search.length > MAX_QUERY_LENGTH) {
+    throw new HttpError(400, `Recherche limitée à ${MAX_QUERY_LENGTH} caractères`);
+  }
+  let tag = null;
+  if (query.tag !== undefined && query.tag !== "") {
+    tag = normalizeTag(query.tag);
+    if (!tag) throw new HttpError(400, "Étiquette de filtre invalide");
+  }
+  let visibility = null;
+  if (query.visibility !== undefined && query.visibility !== "") {
+    visibility = validateVisibility(query.visibility);
+  }
+  return { search, tag, visibility };
+}
+
+/** Traduit les filtres en `$match` ; un ancien clip sans visibilité est privé. */
+function clipFilterMatch({ search, tag, visibility }) {
+  const match = {};
+  if (search) match.title = { $regex: escapeRegex(search), $options: "i" };
+  if (tag) match.tags = tag;
+  if (visibility) match.visibility = visibility === "private" ? { $in: [null, "private"] } : visibility;
+  return match;
+}
+
+/** Étapes communes des listes : drapeau hasFilmstrip puis retrait des champs lourds. */
+const clipSummaryStages = () => [
+  { $addFields: { hasFilmstrip: { $eq: [{ $type: "$filmstripStoredName" }, "string"] } } },
+  { $project: Object.fromEntries(CLIP_SUMMARY_EXCLUDED.map((field) => [field, 0])) },
+];
+
+function parsePagination(query) {
+  return {
+    page: Math.min(MAX_PAGE, Math.max(1, Math.floor(Number(query.page)) || 1)),
+    limit: Math.min(20, Math.max(1, Math.floor(Number(query.limit)) || 5)),
+  };
+}
+
+/** Forme `Page<T>` du contrat à partir d'un résultat aggregatePaginate. */
+const toPage = (result, items) => ({
+  items,
+  page: result.page,
+  limit: result.limit,
+  total: result.totalDocs,
+  pages: result.totalPages,
+  hasPrevPage: result.hasPrevPage,
+  hasNextPage: result.hasNextPage,
+  prevPage: result.prevPage,
+  nextPage: result.nextPage,
+});
+
+/**
+ * Statistiques de la bibliothèque à partir des résumés triés du plus récent
+ * au plus ancien (à égalité, le plus récent l'emporte). Le plan moyen global
+ * vaut durée totale / nombre total de plans.
+ */
+function computeLibraryStats(summaries) {
+  const byVisibility = Object.fromEntries(CLIP_VISIBILITIES.map((visibility) => [visibility, 0]));
+  let totalDurationSec = 0;
+  let totalCuts = 0;
+  let mostNervous = null;
+  let mostSynced = null;
+  for (const clip of summaries) {
+    byVisibility[clip.visibility] += 1;
+    totalDurationSec += clip.durationSec;
+    totalCuts += clip.cutCount;
+    if (!mostNervous || clip.avgShotLength < mostNervous.avgShotLength) mostNervous = clip;
+    if (clip.syncScore !== null && (!mostSynced || clip.syncScore > mostSynced.syncScore)) {
+      mostSynced = clip;
+    }
+  }
+  const clipCount = summaries.length;
+  return {
+    clipCount,
+    totalDurationSec,
+    totalCuts,
+    avgShotLength: clipCount ? totalDurationSec / (totalCuts + clipCount) : null,
+    mostNervous,
+    mostSynced,
+    byVisibility,
+  };
+}
+
+/** Compte les étiquettes : plus fréquentes d'abord, puis ordre alphabétique. */
+function countTags(clips) {
+  const counts = new Map();
+  for (const clip of clips) {
+    for (const tag of clip.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
 /** Échappe les métacaractères pour qu'une recherche reste une simple sous-chaîne. */
@@ -515,20 +901,28 @@ const coverUpload = multer({
 });
 
 // Instance distincte : les limites et formats vidéo ne doivent pas toucher l'upload audio.
-const videoUpload = multer({
+const clipUpload = multer({
   storage,
-  limits: { fileSize: MAX_VIDEO_SIZE, files: 1 },
+  limits: { fileSize: MAX_VIDEO_SIZE, files: 2 },
   fileFilter: (_request, file, callback) => {
+    // La pellicule optionnelle est validée après réception par ses octets JPEG.
+    if (file.fieldname === "filmstrip") return callback(null, true);
     if (VIDEO_MIME_TYPES.has(file.mimetype)) return callback(null, true);
     console.warn(`[multer] Type vidéo refusé : ${file.mimetype}`);
     return callback(new HttpError(400, "Format vidéo non accepté (MP4 ou WebM)"));
   },
 });
 
-/** Reçoit le champ multipart `video` et traduit le dépassement de taille. */
-function receiveVideo(req, res, next) {
-  videoUpload.single("video")(req, res, (error) => {
-    if (error?.code === "LIMIT_FILE_SIZE") return next(new HttpError(400, VIDEO_TOO_LARGE));
+/** Reçoit les champs multipart `video` et `filmstrip` et traduit le dépassement de taille. */
+function receiveClipFiles(req, res, next) {
+  const fields = [
+    { name: "video", maxCount: 1 },
+    { name: "filmstrip", maxCount: 1 },
+  ];
+  clipUpload.fields(fields)(req, res, (error) => {
+    if (error?.code === "LIMIT_FILE_SIZE") {
+      return next(new HttpError(400, error.field === "filmstrip" ? FILMSTRIP_TOO_LARGE : VIDEO_TOO_LARGE));
+    }
     next(error);
   });
 }
@@ -569,6 +963,8 @@ export function createApp() {
   // Express ne gère pas nativement le JSON : ce middleware transforme le corps JSON en objet JavaScript 
   // accessible via req.body.
   // Il est placé avant les routes pour que toutes les requêtes JSON soient traitées.
+  // L'analyse retouchée a sa propre limite ; le parseur global saute alors ce corps déjà lu.
+  app.use("/api/clips/:id/analysis", express.json({ limit: ANALYSIS_BODY_LIMIT }));
   app.use(express.json());
 
   /** Endpoint public utilisé pour vérifier que l'API répond. */
@@ -1006,35 +1402,19 @@ export function createApp() {
     }
   });
 
-  /** Retourne une page des résumés de clips de l'utilisateur (sans cuts ni beats). */
+  /** Retourne une page des résumés de mes clips, filtrés par titre, étiquette ou visibilité. */
   app.get("/api/clips", auth, async (req, res, next) => {
     try {
-      const page = Math.min(MAX_PAGE, Math.max(1, Math.floor(Number(req.query.page)) || 1));
-      const limit = Math.min(20, Math.max(1, Math.floor(Number(req.query.limit)) || 5));
-      const rawQuery = req.query.q ?? "";
-
-      if (typeof rawQuery !== "string") {
-        console.warn("[clips] Paramètre q invalide");
-        return res.status(400).json({ message: "Paramètre de recherche invalide" });
-      }
-      const search = rawQuery.trim();
-      if (search.length > MAX_QUERY_LENGTH) {
-        console.warn(`[clips] Recherche trop longue (${search.length} caractères)`);
-        return res.status(400).json({
-          message: `Recherche limitée à ${MAX_QUERY_LENGTH} caractères`,
-        });
-      }
-
+      const { page, limit } = parsePagination(req.query);
+      const filters = parseClipFilters(req.query);
       console.log(
-        `[clips] Lecture page=${page}, limit=${limit}, filtre=${search ? "oui" : "non"}, user=${req.auth.sub}`,
+        `[clips] Lecture page=${page}, limit=${limit}, filtre=${filters.search ? "oui" : "non"}, ` +
+          `tag=${filters.tag ?? "-"}, visibilité=${filters.visibility ?? "-"}, user=${req.auth.sub}`,
       );
 
-      const match = { ownerId: new mongoose.Types.ObjectId(req.auth.sub) };
-      if (search) match.title = { $regex: escapeRegex(search), $options: "i" };
-
       const aggregate = Clip.aggregate([
-        { $match: match },
-        { $project: { storedName: 0, cuts: 0, beats: 0 } },
+        { $match: { ownerId: new mongoose.Types.ObjectId(req.auth.sub), ...clipFilterMatch(filters) } },
+        ...clipSummaryStages(),
       ]);
       const result = await Clip.aggregatePaginate(aggregate, {
         page,
@@ -1043,95 +1423,120 @@ export function createApp() {
       });
 
       console.log(`[clips] ${result.docs.length} clip(s) envoyé(s) sur ${result.totalDocs}`);
-
-      res.json({
-        items: result.docs.map(toPublicClip),
-        page: result.page,
-        limit: result.limit,
-        total: result.totalDocs,
-        pages: result.totalPages,
-        hasPrevPage: result.hasPrevPage,
-        hasNextPage: result.hasNextPage,
-        prevPage: result.prevPage,
-        nextPage: result.nextPage,
-      });
+      res.json(toPage(result, await publicSummaries(req, result.docs)));
     } catch (error) {
       console.error("[clips] Erreur de pagination", error);
       next(error);
     }
   });
 
+  /** Statistiques de ma bibliothèque (déclarée avant /clips/:id). */
+  app.get("/api/clips/stats", auth, async (req, res, next) => {
+    try {
+      const clips = await Clip.find({ ownerId: req.auth.sub })
+        .select(CLIP_STATS_SELECT)
+        .sort({ createdAt: -1 })
+        .lean();
+      const summaries = await publicSummaries(req, clips);
+      console.log(`[clips] Statistiques calculées sur ${summaries.length} clip(s) de ${req.auth.sub}`);
+      res.json(computeLibraryStats(summaries));
+    } catch (error) {
+      console.error("[clips] Erreur de calcul des statistiques", error);
+      next(error);
+    }
+  });
+
+  /** Mes étiquettes et leur nombre d'utilisations (déclarée avant /clips/:id). */
+  app.get("/api/clips/tags", auth, async (req, res, next) => {
+    try {
+      const clips = await Clip.find({ ownerId: req.auth.sub }).select("tags").lean();
+      const tags = countTags(clips);
+      console.log(`[clips] ${tags.length} étiquette(s) envoyée(s) à ${req.auth.sub}`);
+      res.json(tags);
+    } catch (error) {
+      console.error("[clips] Erreur de lecture des étiquettes", error);
+      next(error);
+    }
+  });
+
   /**
-   * Reçoit la vidéo (`video`), son titre et l'analyse calculée par le navigateur.
-   * Le fichier est écrit par Multer avant la validation : tout refus le supprime.
+   * Reçoit la vidéo (`video`), la pellicule optionnelle (`filmstrip`), le titre,
+   * les étiquettes, la visibilité et l'analyse calculée par le navigateur.
+   * Les fichiers sont écrits par Multer avant la validation : tout refus les supprime.
    */
-  app.post("/api/clips", auth, receiveVideo, async (req, res, next) => {
-    const videoFile = req.file;
+  app.post("/api/clips", auth, receiveClipFiles, async (req, res, next) => {
+    const videoFile = req.files?.video?.[0];
+    const filmstripFile = req.files?.filmstrip?.[0];
+    let clip;
     try {
       if (!videoFile) {
         console.warn(`[clips] Upload sans vidéo par ${req.auth.sub}`);
-        return res.status(400).json({ message: "Fichier vidéo requis" });
+        throw new HttpError(400, "Fichier vidéo requis");
       }
 
       const detectedType = await detectVideoType(videoFile.path);
       if (detectedType !== videoFile.mimetype) {
         throw new HttpError(400, "Fichier vidéo invalide : MP4 ou WebM attendu");
       }
-      const analysis = parseAnalysis(req.body?.analysis);
+      if (filmstripFile) await checkFilmstrip(filmstripFile);
+      const analysis = validateAnalysis(readAnalysisField(req.body?.analysis));
+      const tags = readTagsField(req.body?.tags);
+      const visibility =
+        req.body?.visibility === undefined ? "private" : validateVisibility(req.body.visibility);
       const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
 
-      const clip = await Clip.create({
+      clip = await Clip.create({
         ownerId: req.auth.sub,
         title: title || videoFile.originalname,
         originalName: videoFile.originalname,
         storedName: videoFile.filename,
+        filmstripStoredName: filmstripFile?.filename ?? null,
         mimeType: detectedType,
         size: videoFile.size,
+        tags,
+        visibility,
         ...analysis,
       });
-
-      console.log(`[clips] Clip enregistré : ${clip.id} (${clip.cutCount} coupe(s))`);
-      res.status(201).json(clip.toPublic());
     } catch (error) {
-      console.error("[clips] Upload refusé ou en échec après l'écriture du fichier", error);
-      if (videoFile) await removeFile(path.join(UPLOADS, videoFile.filename));
+      console.error("[clips] Upload refusé ou en échec après l'écriture des fichiers", error);
+      for (const file of [videoFile, filmstripFile]) {
+        if (file) await removeFile(path.join(UPLOADS, file.filename));
+      }
+      return next(error);
+    }
+
+    try {
+      console.log(`[clips] Clip enregistré : ${clip.id} (${clip.cutCount} coupe(s))`);
+      res.status(201).json(await publicClip(req, clip));
+    } catch (error) {
+      console.error("[clips] Clip enregistré mais réponse impossible", error);
       next(error);
     }
   });
 
-  /** Retourne le détail d'un clip du propriétaire, analyse comprise. */
+  /** Retourne le détail d'un clip lisible, analyse et annotations comprises. */
   app.get("/api/clips/:id", auth, async (req, res, next) => {
     try {
-      const clip = await findOwnedClip(req);
+      const clip = await findReadableClip(req);
       if (!clip) return unknownClip(req, res);
       console.log(`[clips] Détail envoyé : ${clip.id}`);
-      res.json(clip.toPublic());
+      res.json(await publicClip(req, clip));
     } catch (error) {
       console.error("[clips] Erreur de lecture du clip", error);
       next(error);
     }
   });
 
-  /** Envoie la vidéo d'un clip du propriétaire avec son type vérifié. */
+  /** Envoie la vidéo d'un clip lisible avec son type vérifié. */
   app.get("/api/clips/:id/video", auth, async (req, res, next) => {
     try {
-      const clip = await findOwnedClip(req);
+      const clip = await findReadableClip(req);
       if (!clip) return unknownClip(req, res);
-
-      res.type(clip.mimeType);
-      res.set("X-Content-Type-Options", "nosniff");
-      res.sendFile(path.join(UPLOADS, clip.storedName), (error) => {
-        if (error) {
-          console.error(`[clips] Erreur d'envoi vidéo ${clip.id}`, error);
-          if (error.code === "ENOENT" && !res.headersSent) {
-            res.removeHeader("Content-Type");
-            res.removeHeader("X-Content-Type-Options");
-            return res.status(404).json({ message: "Clip inconnu" });
-          }
-          if (!res.headersSent) next(error);
-          return;
-        }
-        console.log(`[clips] Vidéo envoyée : ${clip.id}`);
+      sendClipFile(res, next, {
+        clipId: clip.id,
+        storedName: clip.storedName,
+        mimeType: clip.mimeType,
+        missingMessage: "Clip inconnu",
       });
     } catch (error) {
       console.error("[clips] Erreur de préparation du flux vidéo", error);
@@ -1139,19 +1544,76 @@ export function createApp() {
     }
   });
 
-  /** Supprime le clip et son fichier vidéo. */
+  /** Envoie la pellicule JPEG d'un clip lisible. */
+  app.get("/api/clips/:id/filmstrip", auth, async (req, res, next) => {
+    try {
+      const clip = await findReadableClip(req);
+      if (!clip) return unknownClip(req, res);
+      if (!clip.filmstripStoredName) {
+        console.warn(`[clips] Pellicule absente : ${clip.id}`);
+        return res.status(404).json({ message: "Pellicule absente" });
+      }
+      sendClipFile(res, next, {
+        clipId: clip.id,
+        storedName: clip.filmstripStoredName,
+        mimeType: "image/jpeg",
+        missingMessage: "Pellicule absente",
+      });
+    } catch (error) {
+      console.error("[clips] Erreur de préparation de la pellicule", error);
+      next(error);
+    }
+  });
+
+  /** Modifie le titre, les étiquettes ou la visibilité d'un de mes clips. */
+  app.patch("/api/clips/:id", auth, async (req, res, next) => {
+    try {
+      const clip = await findOwnedClip(req);
+      if (!clip) return unknownClip(req, res);
+      const changes = parseClipPatch(req.body);
+      clip.set(changes);
+      await clip.save();
+      console.log(`[clips] Clip modifié : ${clip.id} (${Object.keys(changes).join(", ") || "aucun champ"})`);
+      res.json(await publicClip(req, clip));
+    } catch (error) {
+      console.error("[clips] Erreur de modification du clip", error);
+      next(error);
+    }
+  });
+
+  /** Remplace l'analyse d'un de mes clips (coupes retouchées, sensibilité…). */
+  app.put("/api/clips/:id/analysis", auth, async (req, res, next) => {
+    try {
+      const clip = await findOwnedClip(req);
+      if (!clip) return unknownClip(req, res);
+      const analysis = validateAnalysis(req.body);
+      if (Math.abs(analysis.durationSec - clip.durationSec) > DURATION_TOLERANCE_SEC) {
+        throw new HttpError(400, "Analyse invalide : la durée ne correspond pas au clip");
+      }
+      clip.set(analysis);
+      await clip.save();
+      console.log(`[clips] Analyse remplacée : ${clip.id} (${clip.cutCount} coupe(s))`);
+      res.json(await publicClip(req, clip));
+    } catch (error) {
+      console.error("[clips] Erreur de remplacement de l'analyse", error);
+      next(error);
+    }
+  });
+
+  /** Supprime le clip, sa vidéo et sa pellicule (les annotations sont dans le document). */
   app.delete("/api/clips/:id", auth, async (req, res, next) => {
     try {
       if (!mongoose.isValidObjectId(req.params.id)) return unknownClip(req, res);
       const clip = await Clip.findOneAndDelete({
         _id: req.params.id,
         ownerId: req.auth.sub,
-      }).select("+storedName");
+      }).select(CLIP_HIDDEN_FIELDS);
       if (!clip) return unknownClip(req, res);
 
-      if (!(await removeFile(path.join(UPLOADS, clip.storedName)))) {
+      const removed = await Promise.all(clipFilePaths(clip).map(removeFile));
+      if (removed.includes(false)) {
         return res.status(500).json({
-          message: "Métadonnée supprimée, mais fichier vidéo non supprimé",
+          message: "Métadonnée supprimée, mais un fichier du clip n'a pas pu être supprimé",
         });
       }
 
@@ -1159,6 +1621,51 @@ export function createApp() {
       res.status(204).end();
     } catch (error) {
       console.error("[clips] Erreur de suppression", error);
+      next(error);
+    }
+  });
+
+  /** Ajoute une annotation horodatée à un clip lisible. */
+  app.post("/api/clips/:id/annotations", auth, async (req, res, next) => {
+    try {
+      const clip = await findReadableClip(req);
+      if (!clip) return unknownClip(req, res);
+      const { time, text } = parseAnnotation(req.body, clip.durationSec);
+      if (clip.annotations.length >= MAX_ANNOTATIONS) {
+        throw new HttpError(400, `Annotations limitées à ${MAX_ANNOTATIONS} par clip`);
+      }
+      clip.annotations.push({ time, text, authorId: req.auth.sub });
+      await clip.save();
+      const annotation = clip.annotations.at(-1);
+      console.log(`[clips] Annotation ajoutée : ${annotation.id} sur ${clip.id}`);
+      res.status(201).json(toPublicAnnotation(annotation, await loadUserNames([req.auth.sub])));
+    } catch (error) {
+      console.error("[clips] Erreur d'ajout d'annotation", error);
+      next(error);
+    }
+  });
+
+  /** Supprime une annotation : réservé à son auteur ou au propriétaire du clip. */
+  app.delete("/api/clips/:id/annotations/:annotationId", auth, async (req, res, next) => {
+    try {
+      const clip = await findReadableClip(req);
+      if (!clip) return unknownClip(req, res);
+      const { annotationId } = req.params;
+      const annotation = mongoose.isValidObjectId(annotationId) ? clip.annotations.id(annotationId) : null;
+      if (!annotation) {
+        console.warn(`[clips] Annotation introuvable : ${annotationId} sur ${clip.id}`);
+        return res.status(404).json({ message: "Annotation inconnue" });
+      }
+      const viewerId = String(req.auth.sub);
+      if (String(annotation.authorId) !== viewerId && String(clip.ownerId) !== viewerId) {
+        throw new HttpError(403, "Seul l'auteur ou le propriétaire peut supprimer cette annotation");
+      }
+      clip.annotations.pull(annotation._id);
+      await clip.save();
+      console.log(`[clips] Annotation supprimée : ${annotationId} sur ${clip.id}`);
+      res.status(204).end();
+    } catch (error) {
+      console.error("[clips] Erreur de suppression d'annotation", error);
       next(error);
     }
   });
@@ -1175,6 +1682,12 @@ export function createApp() {
       error?.message === "Format audio non accepté"
     ) {
       return res.status(400).json({ message: error.message });
+    }
+    if (error?.type === "entity.parse.failed") {
+      return res.status(400).json({ message: "Corps JSON invalide" });
+    }
+    if (error?.type === "entity.too.large") {
+      return res.status(413).json({ message: "Requête trop volumineuse" });
     }
     if (error?.name === "ValidationError") {
       return res.status(400).json({ message: error.message });
