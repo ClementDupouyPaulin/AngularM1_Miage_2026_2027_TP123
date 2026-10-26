@@ -142,4 +142,21 @@ describe('PulseTimelineComponent', () => {
     hit.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(seeks).toEqual([12.4]);
   });
+
+  it('aligne l’échelle sur maxTime sans dépasser la durée de l’extrait', () => {
+    fixture.componentRef.setInput('maxTime', 120);
+    fixture.detectChanges();
+    const root: HTMLElement = fixture.nativeElement;
+    expect(root.querySelectorAll('line.cut')[2].getAttribute('x1')).toBe('250');
+    expect(root.querySelector<HTMLElement>('.cursor')?.style.left).toBe(`${(10 / 120) * 100}%`);
+    expect(slider.getAttribute('aria-valuemax')).toBe('60');
+
+    const plot: HTMLElement = root.querySelector('.plot')!;
+    vi.spyOn(plot, 'getBoundingClientRect').mockReturnValue(
+      { left: 0, width: 400, top: 0, height: 100 } as DOMRect,
+    );
+    plot.dispatchEvent(new MouseEvent('click', { clientX: 100, bubbles: true }));
+    plot.dispatchEvent(new MouseEvent('click', { clientX: 300, bubbles: true }));
+    expect(seeks).toEqual([30, 60]);
+  });
 });

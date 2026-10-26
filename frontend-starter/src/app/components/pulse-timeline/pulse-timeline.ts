@@ -130,6 +130,8 @@ export class PulseTimelineComponent {
   readonly analysis = input.required<ClipAnalysis>();
   readonly currentTime = input(0);
   readonly label = input('');
+  /** Échelle horizontale commune (s), pour aligner plusieurs timelines ; `null` = durée de l'extrait. */
+  readonly maxTime = input<number | null>(null);
   readonly seek = output<number>();
 
   private readonly plot = viewChild.required<ElementRef<HTMLElement>>('plot');
@@ -143,10 +145,11 @@ export class PulseTimelineComponent {
   readonly hoveredCut = signal<number | null>(null);
 
   readonly duration = computed(() => Math.max(0, this.analysis().durationSec));
+  readonly scaleDuration = computed(() => Math.max(this.duration(), this.maxTime() ?? 0));
   readonly accessibleName = computed(() => this.label() || 'Position de lecture');
 
   private readonly density = computed(() =>
-    smooth(cutDensity(this.analysis().cuts, this.duration())),
+    smooth(cutDensity(this.analysis().cuts, this.scaleDuration())),
   );
 
   readonly peakDensity = computed(() => Math.max(1, ...this.density()));
@@ -171,7 +174,7 @@ export class PulseTimelineComponent {
     this.analysis().cuts.map((time, index) => ({
       index,
       time,
-      x: round2(timeToRatio(time, this.duration()) * VIEW_WIDTH),
+      x: round2(timeToRatio(time, this.scaleDuration()) * VIEW_WIDTH),
     })),
   );
 
@@ -179,24 +182,24 @@ export class PulseTimelineComponent {
   readonly beatPath = computed(() =>
     this.analysis()
       .beats.map((beat) => {
-        const x = round2(timeToRatio(beat, this.duration()) * VIEW_WIDTH);
+        const x = round2(timeToRatio(beat, this.scaleDuration()) * VIEW_WIDTH);
         return `M${x} ${BEAT_TOP + 4}V${BEAT_BOTTOM - 4}`;
       })
       .join(''),
   );
 
   readonly ticks = computed(() =>
-    axisTicks(this.duration()).map((time) => ({
+    axisTicks(this.scaleDuration()).map((time) => ({
       time,
-      x: round2(timeToRatio(time, this.duration()) * VIEW_WIDTH),
-      percent: timeToRatio(time, this.duration()) * 100,
+      x: round2(timeToRatio(time, this.scaleDuration()) * VIEW_WIDTH),
+      percent: timeToRatio(time, this.scaleDuration()) * 100,
       label: formatTime(time),
     })),
   );
 
   readonly clampedTime = computed(() => clamp(this.currentTime(), 0, this.duration()));
   readonly cursorPercent = computed(
-    () => timeToRatio(this.clampedTime(), this.duration()) * 100,
+    () => timeToRatio(this.clampedTime(), this.scaleDuration()) * 100,
   );
   readonly valueNow = computed(() => Math.round(this.clampedTime()));
   readonly valueText = computed(
@@ -210,7 +213,7 @@ export class PulseTimelineComponent {
     if (time === undefined) return null;
     return {
       text: `Coupe ${index + 1} · ${formatPreciseTime(time)}`,
-      percent: timeToRatio(time, this.duration()) * 100,
+      percent: timeToRatio(time, this.scaleDuration()) * 100,
     };
   });
 
@@ -224,7 +227,8 @@ export class PulseTimelineComponent {
   onPlotClick(event: MouseEvent): void {
     const rect = this.plot().nativeElement.getBoundingClientRect();
     if (!(rect.width > 0)) return;
-    this.seek.emit(ratioToTime((event.clientX - rect.left) / rect.width, this.duration()));
+    const time = ratioToTime((event.clientX - rect.left) / rect.width, this.scaleDuration());
+    this.seek.emit(clamp(time, 0, this.duration()));
   }
 
   onCutClick(event: MouseEvent, time: number): void {

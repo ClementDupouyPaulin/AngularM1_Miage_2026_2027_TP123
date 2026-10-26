@@ -1,0 +1,128 @@
+<section class="page">
+  <a class="back-link" routerLink="/clips">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M15.4 6.6 14 5.2 7.2 12l6.8 6.8 1.4-1.4L10 12l5.4-5.4Z" fill="currentColor" />
+    </svg>
+    Retour à mes extraits
+  </a>
+
+  <header class="hero">
+    <p class="eyebrow">Film Pulse · Comparaison</p>
+    <h1>Comparer deux extraits</h1>
+    <p>Superposez le pouls de deux montages sur la même échelle de temps et comparez leurs statistiques.</p>
+  </header>
+
+  @if (listLoading()) {
+    <div class="card" aria-busy="true">
+      <p class="status" role="status">Chargement de vos extraits…</p>
+      <div class="skeleton skeleton-row"></div>
+    </div>
+  } @else if (listError()) {
+    <div class="card">
+      <p class="alert alert-error" role="alert">{{ listError() }}</p>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="card empty">
+      <h2>Pas assez d’extraits</h2>
+      <p>Il faut au moins deux extraits analysés pour les comparer.</p>
+      <a class="btn-link" routerLink="/clips">Analyser un extrait</a>
+    </div>
+  } @else {
+    <section class="card" aria-labelledby="choice-heading">
+      <h2 id="choice-heading">Choix des extraits</h2>
+      <div class="pickers">
+        @for (side of sides; track side) {
+          <label [class]="'picker picker-' + side">
+            <span><span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>{{ sideLabels[side] }}</span>
+            <select [attr.data-side]="side" (change)="onSelect(side, $event)">
+              <option value="" [selected]="!selected()[side]">— Choisir un extrait —</option>
+              @for (clip of options(); track clip.id) {
+                <option
+                  [value]="clip.id"
+                  [selected]="clip.id === selected()[side]"
+                  [disabled]="clip.id === selected()[side === 'a' ? 'b' : 'a']"
+                >
+                  {{ clip.title }}
+                </option>
+              }
+            </select>
+          </label>
+        }
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="pulse-heading">
+      <h2 id="pulse-heading">Pouls des montages</h2>
+      <p class="hint">Les deux courbes partagent la même échelle de temps : un montage plus court s’arrête plus tôt.</p>
+      <div class="timelines">
+        @for (side of sides; track side) {
+          <div [class]="'timeline-block timeline-' + side" [attr.data-side]="side">
+            @let state = states()[side];
+            @if (state.status === 'ready') {
+              <h3>
+                <span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>
+                <span class="visually-hidden">{{ sideLabels[side] }} : </span>{{ state.clip.title }}
+              </h3>
+              <app-pulse-timeline
+                [analysis]="state.clip.analysis"
+                [currentTime]="currentTimes()[side]"
+                [maxTime]="maxTime()"
+                [label]="'Pouls du montage de « ' + state.clip.title + ' » (' + sideLabels[side] + ')'"
+                (seek)="seekTo(side, $event)"
+              />
+            } @else {
+              <h3><span class="side-tag" aria-hidden="true">{{ side.toUpperCase() }}</span>{{ sideLabels[side] }}</h3>
+              @if (state.status === 'loading') {
+                <p class="status" role="status">Chargement de l’{{ sideLabels[side].toLowerCase() }}…</p>
+                <div class="skeleton skeleton-timeline"></div>
+              } @else if (state.status === 'error') {
+                <p class="alert alert-error" role="alert">{{ state.message }}</p>
+              } @else {
+                <p class="placeholder">Choisissez un extrait pour afficher son pouls.</p>
+              }
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    @if (pair(); as pair) {
+      <section class="card" aria-labelledby="stats-heading">
+        <h2 id="stats-heading">Statistiques comparées</h2>
+        <p class="summary" aria-live="polite">{{ summary() }}</p>
+        <div class="table-wrap">
+          <table class="compare-table">
+            <caption class="visually-hidden">
+              Comparaison de « {{ pair.a.title }} » (A) et « {{ pair.b.title }} » (B)
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Statistique</th>
+                <th scope="col"><span class="side-tag" aria-hidden="true">A</span>{{ pair.a.title }}</th>
+                <th scope="col"><span class="side-tag" aria-hidden="true">B</span>{{ pair.b.title }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.label) {
+                <tr>
+                  <th scope="row">{{ row.label }}</th>
+                  @for (side of sides; track side; let i = $index) {
+                    <td [class.winner]="row.winner === side">
+                      <span class="value">{{ row.values[i] }}</span>
+                      @if (row.winner === side) {
+                        <span class="badge winner-badge">
+                          <span aria-hidden="true">{{ row.icon }}</span>
+                          {{ row.badge }}
+                        </span>
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </section>
+    }
+  }
+</section>
