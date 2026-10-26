@@ -4,6 +4,20 @@ import { Observable } from 'rxjs';
 import { Clip, ClipAnalysis, ClipSummary } from '../models/clip.model';
 import { Page } from '../models/page.model';
 
+/** Type MIME déduit de l'extension quand le navigateur laisse `File.type` vide. */
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+};
+
+/** Le fichier tel quel s'il a un type, sinon une copie typée d'après son extension. */
+export function withMimeType(file: File): File {
+  if (file.type) return file;
+  const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+  const type = MIME_BY_EXTENSION[extension];
+  return type ? new File([file], file.name, { type }) : file;
+}
+
 /**
  * Encapsulates all HTTP operations for film clips.
  * Aucun composant n'injecte `HttpClient` : toute la frontière HTTP est ici.
@@ -30,7 +44,7 @@ export class ClipService {
    */
   upload(file: File, title: string, analysis: ClipAnalysis): Observable<HttpEvent<Clip>> {
     const body = new FormData();
-    body.append('video', file);
+    body.append('video', withMimeType(file));
     body.append('title', title);
     body.append('analysis', JSON.stringify(analysis));
     return this.http.post<Clip>('/api/clips', body, {

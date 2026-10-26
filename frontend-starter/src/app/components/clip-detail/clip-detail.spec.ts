@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { ActivatedRoute, ParamMap, convertToParamMap, provideRouter } from '@angular/router';
+import { BehaviorSubject, Observable, Subject, of, throwError } from 'rxjs';
 import { Clip } from '../../shared/models/clip.model';
 import { ClipService } from '../../shared/services/clip.service';
 import { PulseTimelineComponent } from '../pulse-timeline/pulse-timeline';
@@ -43,6 +43,7 @@ describe('ClipDetailComponent', () => {
   let service: { get: ReturnType<typeof vi.fn>; video: ReturnType<typeof vi.fn> };
   let createSpy: ReturnType<typeof vi.fn<(obj: Blob | MediaSource) => string>>;
   let revokeSpy: ReturnType<typeof vi.fn<(url: string) => void>>;
+  let paramMap: BehaviorSubject<ParamMap>;
   const { createObjectURL, revokeObjectURL } = URL;
 
   function setup(get: Observable<Clip>, video: Observable<Blob> = of(new Blob(['v']))) {
@@ -55,6 +56,7 @@ describe('ClipDetailComponent', () => {
 
   beforeEach(() => {
     service = { get: vi.fn(), video: vi.fn() };
+    paramMap = new BehaviorSubject(convertToParamMap({ id: 'c1' }));
     createSpy = vi.fn<(obj: Blob | MediaSource) => string>(() => 'blob:clip-1');
     revokeSpy = vi.fn<(url: string) => void>();
     URL.createObjectURL = createSpy;
@@ -65,7 +67,7 @@ describe('ClipDetailComponent', () => {
       providers: [
         provideRouter([]),
         { provide: ClipService, useValue: service },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: convertToParamMap({ id: 'c1' }) } } },
+        { provide: ActivatedRoute, useValue: { paramMap } },
       ],
     });
   });
@@ -114,6 +116,43 @@ describe('ClipDetailComponent', () => {
 
     fixture.destroy();
     expect(revokeSpy).toHaveBeenCalledWith('blob:clip-1');
+  });
+
+  it('recharge à chaque changement d’id en révoquant l’ObjectURL précédente', () => {
+    const fixture = setup(of(clip));
+    createSpy.mockReturnValue('blob:clip-2');
+    service.get.mockReturnValue(of({ ...clip, id: 'c2', title: 'Fusillade' }));
+
+    paramMap.next(convertToParamMap({ id: 'c2' }));
+    fixture.detectChanges();
+
+    expect(revokeSpy).toHaveBeenCalledWith('blob:clip-1');
+    expect(service.get).toHaveBeenLastCalledWith('c2');
+    expect(service.video).toHaveBeenLastCalledWith('c2');
+    expect(fixture.nativeElement.querySelector('h1')?.textContent).toContain('Fusillade');
+    expect(fixture.componentInstance.videoUrl()).toBe('blob:clip-2');
+  });
+
+  it('annule le chargement en cours quand l’id change', () => {
+    const pendingVideo = new Subject<Blob>();
+    const fixture = setup(of(clip), pendingVideo);
+    service.video.mockReturnValue(of(new Blob(['v2'])));
+    createSpy.mockReturnValue('blob:clip-2');
+
+    paramMap.next(convertToParamMap({ id: 'c2' }));
+    expect(pendingVideo.observed).toBe(false);
+    pendingVideo.next(new Blob(['tardif']));
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance.videoUrl()).toBe('blob:clip-2');
+  });
+
+  it('affiche « Extrait introuvable » sans id', () => {
+    paramMap.next(convertToParamMap({}));
+    const fixture = setup(of(clip));
+
+    expect(fixture.componentInstance.error()).toBe('Extrait introuvable.');
+    expect(service.get).not.toHaveBeenCalled();
   });
 
   it('navigue entre coupes précédente et suivante', () => {

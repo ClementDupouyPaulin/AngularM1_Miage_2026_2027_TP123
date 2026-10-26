@@ -4,7 +4,7 @@
 
 .hero h1 { margin: var(--space-2) 0; }
 .hero p { margin: 0; }
-.hero-link { margin-top: var(--space-3) !important; }
+.hero .hero-link { margin-top: var(--space-3); }
 .hero-link a { color: inherit; font-weight: 600; }
 
 .card h2 { margin: 0 0 var(--space-3); font-size: 1.25rem; }

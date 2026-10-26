@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { EMPTY, catchError, switchMap, tap } from 'rxjs';
+import { EMPTY, Observable, catchError, map, switchMap, tap } from 'rxjs';
 import { SYNC_ALIGNED_THRESHOLD } from '../../shared/analysis/sync-score';
 import { Clip } from '../../shared/models/clip.model';
 import { ClipService } from '../../shared/services/clip.service';
@@ -109,13 +109,18 @@ export class ClipDetailComponent {
   constructor() {
     this.destroyRef.onDestroy(() => this.revokeVideoUrl());
 
-    const id = this.route.snapshot.paramMap.get('id') ?? '';
-    if (!id) {
-      this.loading.set(false);
-      this.error.set('Extrait introuvable.');
-      return;
-    }
-    this.load(id);
+    this.route.paramMap
+      .pipe(
+        map((params) => params.get('id') ?? ''),
+        tap(() => this.reset()),
+        switchMap((id) => this.load(id)),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((blob) => {
+        this.revokeVideoUrl();
+        this.videoUrl.set(URL.createObjectURL(blob));
+        this.videoLoading.set(false);
+      });
   }
 
   onTimeUpdate(): void {
@@ -139,8 +144,25 @@ export class ClipDetailComponent {
     if (time !== null) this.seekTo(time);
   }
 
-  private load(id: string): void {
-    this.service
+  /** Réinitialise l'affichage avant de charger un nouvel extrait. */
+  private reset(): void {
+    this.revokeVideoUrl();
+    this.clip.set(null);
+    this.loading.set(true);
+    this.error.set('');
+    this.videoLoading.set(false);
+    this.videoError.set('');
+    this.currentTime.set(0);
+  }
+
+  /** Extrait puis octets vidéo ; n'émet que le `Blob`, les erreurs sont affichées. */
+  private load(id: string): Observable<Blob> {
+    if (!id) {
+      this.loading.set(false);
+      this.error.set('Extrait introuvable.');
+      return EMPTY;
+    }
+    return this.service
       .get(id)
       .pipe(
         tap((clip) => {
@@ -165,13 +187,7 @@ export class ClipDetailComponent {
             }),
           ),
         ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe((blob) => {
-        this.revokeVideoUrl();
-        this.videoUrl.set(URL.createObjectURL(blob));
-        this.videoLoading.set(false);
-      });
+      );
   }
 
   private revokeVideoUrl(): void {

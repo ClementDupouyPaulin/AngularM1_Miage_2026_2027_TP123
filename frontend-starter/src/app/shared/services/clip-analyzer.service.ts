@@ -14,12 +14,19 @@ const FRAME_HEIGHT = 36;
 /** Part de la progression consacrée à la vidéo ; le reste va à l'audio. */
 const VIDEO_PROGRESS_SHARE = 0.85;
 const TIME_DECIMALS = 1000;
+/** Délai maximal (ms) d'un déplacement dans la vidéo avant de la déclarer illisible. */
+export const SEEK_TIMEOUT_MS = 5000;
+/** Délai maximal (ms) de chargement des métadonnées. */
+export const METADATA_TIMEOUT_MS = 10000;
+/** Position hors fin qui force le calcul de la durée d'une WebM annonçant `Infinity`. */
+const DURATION_PROBE_TIME = 1e101;
 
-export type ClipAnalysisErrorCode = 'too-long' | 'unreadable' | 'aborted';
+export type ClipAnalysisErrorCode = 'too-long' | 'unreadable' | 'unknown-duration' | 'aborted';
 
 const ERROR_MESSAGES: Record<ClipAnalysisErrorCode, string> = {
   'too-long': `L'extrait dépasse ${MAX_CLIP_DURATION_SEC} secondes.`,
   unreadable: 'Impossible de lire cette vidéo (format ou codec non pris en charge).',
+  'unknown-duration': 'Impossible d’analyser cette vidéo : durée de la vidéo indéterminée.',
   aborted: 'Analyse annulée.',
 };
 
@@ -69,20 +76,45 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new ClipAnalysisError('aborted');
 }
 
-/** Résout au premier `event` de la cible, rejette sur `error`. */
-function once(target: HTMLMediaElement, event: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const onEvent = () => {
-      target.removeEventListener('error', onError);
-      resolve();
+/**
+ * Relaie `promise`, mais rejette en 'unreadable' après `timeoutMs`
+ * et en 'aborted' dès l'annulation de `signal`.
+ */
+export function withDeadline<T>(promise: Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ClipAnalysisError('aborted'));
+      return;
+    }
+    const settle = (finish: () => void) => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      finish();
     };
-    const onError = () => {
-      target.removeEventListener(event, onEvent);
-      reject(new ClipAnalysisError('unreadable'));
-    };
-    target.addEventListener(event, onEvent, { once: true });
-    target.addEventListener('error', onError, { once: true });
+    const onAbort = () => settle(() => reject(new ClipAnalysisError('aborted')));
+    const timer = setTimeout(() => settle(() => reject(new ClipAnalysisError('unreadable'))), timeoutMs);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (value) => settle(() => resolve(value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
   });
+}
+
+/** Résout au premier des `events` de la cible, rejette sur `error`, délai ou annulation. */
+function once(target: EventTarget, events: string[], timeoutMs: number, signal?: AbortSignal): Promise<void> {
+  let cleanup: () => void = () => undefined;
+  const fired = new Promise<void>((resolve, reject) => {
+    const onEvent = () => resolve();
+    const onError = () => reject(new ClipAnalysisError('unreadable'));
+    events.forEach((event) => target.addEventListener(event, onEvent));
+    target.addEventListener('error', onError);
+    cleanup = () => {
+      events.forEach((event) => target.removeEventListener(event, onEvent));
+      target.removeEventListener('error', onError);
+    };
+  });
+  return withDeadline(fired, timeoutMs, signal).finally(cleanup);
 }
 
 /**
@@ -98,10 +130,11 @@ export class ClipAnalyzerService {
     const url = URL.createObjectURL(file);
     try {
       const { durationSec, diffs } = await this.analyzeVideo(url, options);
-      const beats = await this.analyzeAudio(file, signal);
-      onProgress?.(1);
-      const cuts = detectCuts(diffs, SAMPLE_FPS).map(roundTime);
       const duration = roundTime(durationSec);
+      const withinClip = (time: number) => time >= 0 && time <= duration;
+      const beats = (await this.analyzeAudio(file, signal)).filter(withinClip);
+      onProgress?.(1);
+      const cuts = detectCuts(diffs, SAMPLE_FPS).map(roundTime).filter(withinClip);
       return { version: 1, durationSec: duration, cuts, beats, syncScore: syncScore(cuts, beats, duration) };
     } finally {
       URL.revokeObjectURL(url);
@@ -113,11 +146,12 @@ export class ClipAnalyzerService {
     url: string,
     { signal, onProgress }: ClipAnalyzeOptions,
   ): Promise<{ durationSec: number; diffs: number[] }> {
-    const source = await this.openVideo(url).catch((error: unknown) => {
+    const source = await this.openVideo(url, signal).catch((error: unknown) => {
       throw error instanceof ClipAnalysisError ? error : new ClipAnalysisError('unreadable');
     });
     try {
       const durationSec = source.durationSec;
+      if (durationSec === Number.POSITIVE_INFINITY) throw new ClipAnalysisError('unknown-duration');
       if (!Number.isFinite(durationSec) || durationSec <= 0) throw new ClipAnalysisError('unreadable');
       if (durationSec > MAX_CLIP_DURATION_SEC) throw new ClipAnalysisError('too-long');
 
@@ -126,7 +160,7 @@ export class ClipAnalyzerService {
       let previous: Uint8ClampedArray | null = null;
       for (let i = 0; i < frameCount; i++) {
         throwIfAborted(signal);
-        const frame = await source.frameAt(i / SAMPLE_FPS);
+        const frame = await withDeadline(source.frameAt(i / SAMPLE_FPS), SEEK_TIMEOUT_MS, signal);
         if (previous) diffs.push(histogramDifference(previous, frame));
         previous = frame;
         onProgress?.((VIDEO_PROGRESS_SHARE * (i + 1)) / frameCount);
@@ -152,14 +186,15 @@ export class ClipAnalyzerService {
   }
 
   /** Ouvre la vidéo hors DOM et prépare un canvas réduit pour lire ses images. */
-  protected async openVideo(url: string): Promise<FrameSource> {
+  protected async openVideo(url: string, signal?: AbortSignal): Promise<FrameSource> {
     const video = document.createElement('video');
     video.muted = true;
     video.preload = 'auto';
     video.playsInline = true;
-    const metadata = once(video, 'loadedmetadata');
+    const metadata = once(video, ['loadedmetadata'], METADATA_TIMEOUT_MS, signal);
     video.src = url;
     await metadata;
+    const durationSec = await this.resolveDuration(video, signal);
 
     const canvas = document.createElement('canvas');
     canvas.width = FRAME_WIDTH;
@@ -168,9 +203,9 @@ export class ClipAnalyzerService {
     if (!context) throw new ClipAnalysisError('unreadable');
 
     return {
-      durationSec: video.duration,
+      durationSec,
       frameAt: async (timeSec) => {
-        const seeked = once(video, 'seeked');
+        const seeked = once(video, ['seeked'], SEEK_TIMEOUT_MS, signal);
         video.currentTime = timeSec;
         await seeked;
         context.drawImage(video, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
@@ -181,6 +216,28 @@ export class ClipAnalyzerService {
         video.load();
       },
     };
+  }
+
+  /**
+   * Durée de la vidéo. Certaines WebM annoncent `Infinity` tant qu'on n'a pas
+   * cherché au-delà de la fin : on force ce calcul puis on revient au début.
+   * Reste `Infinity` si le navigateur ne parvient pas à la déterminer.
+   */
+  protected async resolveDuration(video: HTMLMediaElement, signal?: AbortSignal): Promise<number> {
+    if (video.duration !== Number.POSITIVE_INFINITY) return video.duration;
+    try {
+      const probed = once(video, ['timeupdate', 'seeked'], SEEK_TIMEOUT_MS, signal);
+      video.currentTime = DURATION_PROBE_TIME;
+      await probed;
+      const durationSec = video.duration;
+      const rewound = once(video, ['seeked'], SEEK_TIMEOUT_MS, signal);
+      video.currentTime = 0;
+      await rewound;
+      return durationSec;
+    } catch (error) {
+      if (error instanceof ClipAnalysisError && error.code === 'aborted') throw error;
+      return Number.POSITIVE_INFINITY;
+    }
   }
 
   /** Décode la piste audio du fichier ; rejette si codec ou piste absents. */

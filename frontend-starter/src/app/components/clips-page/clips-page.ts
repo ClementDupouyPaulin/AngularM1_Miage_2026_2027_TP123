@@ -369,7 +369,7 @@ export class ClipsPageComponent {
     this.uploading.set(true);
     this.uploadProgress.set(null);
     this.uploadError.set('');
-    const submittedTitle = this.title.value.trim() || file.name;
+    const submittedTitle = this.title.value.trim() || file.name.slice(0, TITLE_MAX_LENGTH);
     this.title.disable({ emitEvent: false });
 
     this.service

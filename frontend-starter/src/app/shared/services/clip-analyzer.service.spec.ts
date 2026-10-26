@@ -5,6 +5,7 @@ import {
   FrameSource,
   MAX_CLIP_DURATION_SEC,
   SAMPLE_FPS,
+  SEEK_TIMEOUT_MS,
   mixToMono,
 } from './clip-analyzer.service';
 
@@ -42,6 +43,12 @@ class FakeAnalyzer extends ClipAnalyzerService {
   seekedTimes: number[] = [];
   closed = false;
   beforeFrame: (timeSec: number) => void = () => undefined;
+  /** Si vrai, `frameAt` ne se résout jamais (seek bloqué). */
+  frameHangs = false;
+
+  probeDuration(video: EventTarget, signal?: AbortSignal): Promise<number> {
+    return this.resolveDuration(video as HTMLMediaElement, signal);
+  }
 
   protected override async openVideo(): Promise<FrameSource> {
     if (this.openError) throw this.openError;
@@ -50,6 +57,7 @@ class FakeAnalyzer extends ClipAnalyzerService {
       frameAt: async (timeSec) => {
         this.beforeFrame(timeSec);
         this.seekedTimes.push(timeSec);
+        if (this.frameHangs) return new Promise<Uint8ClampedArray>(() => undefined);
         return solidFrame(timeSec < this.cutAtSec - 1e-9 ? 0 : 255);
       },
       close: () => {
@@ -61,6 +69,27 @@ class FakeAnalyzer extends ClipAnalyzerService {
   protected override async decodeAudio(): Promise<DecodedAudio> {
     if (this.audio instanceof Error) throw this.audio;
     return this.audio;
+  }
+}
+
+/** Élément média minimal : la durée devient `computedDuration` après un seek au-delà de la fin. */
+class FakeVideo extends EventTarget {
+  duration = Number.POSITIVE_INFINITY;
+  private time = 0;
+
+  constructor(private readonly computedDuration: number) {
+    super();
+  }
+
+  get currentTime(): number {
+    return this.time;
+  }
+
+  set currentTime(value: number) {
+    const beyondEnd = value > 1e100;
+    this.time = beyondEnd ? this.computedDuration : value;
+    if (beyondEnd) this.duration = this.computedDuration;
+    queueMicrotask(() => this.dispatchEvent(new Event(beyondEnd ? 'timeupdate' : 'seeked')));
   }
 }
 
@@ -159,9 +188,72 @@ describe('ClipAnalyzerService', () => {
     expect((error as ClipAnalysisError).message).toContain('Impossible de lire');
 
     analyzer.openError = null;
-    analyzer.durationSec = Number.POSITIVE_INFINITY;
+    analyzer.durationSec = Number.NaN;
     await expect(analyzer.analyze(file)).rejects.toMatchObject({ code: 'unreadable' });
     expect(revokeSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('refuse avec un message dédié une durée restée infinie', async () => {
+    analyzer.durationSec = Number.POSITIVE_INFINITY;
+
+    const error = await analyzer.analyze(file).catch((e: unknown) => e);
+
+    expect((error as ClipAnalysisError).code).toBe('unknown-duration');
+    expect((error as ClipAnalysisError).message).toContain('durée de la vidéo indéterminée');
+  });
+
+  it('force la durée d’une WebM annonçant Infinity puis revient au début', async () => {
+    const video = new FakeVideo(12.5);
+
+    await expect(analyzer.probeDuration(video)).resolves.toBe(12.5);
+    expect(video.currentTime).toBe(0);
+  });
+
+  it('laisse la durée infinie si le navigateur ne la détermine pas', async () => {
+    await expect(analyzer.probeDuration(new FakeVideo(Number.POSITIVE_INFINITY))).resolves.toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it('ignore les beats situés après la fin de la vidéo', async () => {
+    analyzer.durationSec = 3;
+    analyzer.audio = { channels: [burstSignal(3, [0.5, 1.2, 2.6])], sampleRate: SAMPLE_RATE };
+    expect((await analyzer.analyze(file)).beats.length).toBe(3);
+
+    analyzer.durationSec = 2.3;
+    const result = await analyzer.analyze(file);
+
+    expect(result.beats.length).toBe(2);
+    expect(result.beats.every((beat) => beat >= 0 && beat <= result.durationSec)).toBe(true);
+  });
+
+  it('rejette immédiatement sur annulation pendant un seek bloqué', async () => {
+    const controller = new AbortController();
+    analyzer.frameHangs = true;
+
+    const pending = analyzer.analyze(file, { signal: controller.signal });
+    await vi.waitFor(() => expect(analyzer.seekedTimes.length).toBe(1));
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ code: 'aborted' });
+    expect(analyzer.closed).toBe(true);
+    expect(revokeSpy).toHaveBeenCalledWith(OBJECT_URL);
+  });
+
+  it('déclare la vidéo illisible quand un seek dépasse le délai', async () => {
+    vi.useFakeTimers();
+    try {
+      analyzer.frameHangs = true;
+      const assertion = expect(analyzer.analyze(file)).rejects.toMatchObject({ code: 'unreadable' });
+
+      await vi.advanceTimersByTimeAsync(SEEK_TIMEOUT_MS);
+
+      await assertion;
+      expect(analyzer.seekedTimes.length).toBe(1);
+      expect(analyzer.closed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('s’interrompt sur abort pendant l’échantillonnage', async () => {

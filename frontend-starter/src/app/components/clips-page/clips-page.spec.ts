@@ -8,6 +8,7 @@ import {
   ClipsPageComponent,
   MAX_CLIP_FILE_SIZE,
   SEARCH_DEBOUNCE_MS,
+  TITLE_MAX_LENGTH,
   formatDuration,
   syncScoreLabel,
   validateClipFile,
@@ -183,6 +184,19 @@ describe('ClipsPageComponent', () => {
       expect(service.list).toHaveBeenCalledWith(1, 5, '');
       expect(component.file()).toBeUndefined();
       expect(component.analysis()).toBeNull();
+    });
+
+    it('tronque le titre de repli (nom de fichier) à TITLE_MAX_LENGTH', async () => {
+      setup();
+      analyzer.analyze.mockResolvedValue(analysis);
+      const file = videoFile(`${'a'.repeat(TITLE_MAX_LENGTH + 10)}.mp4`);
+      component.selectFile(file);
+      await component.analyze();
+      service.upload.mockReturnValue(new Subject<unknown>());
+
+      component.upload();
+
+      expect(service.upload).toHaveBeenCalledWith(file, 'a'.repeat(TITLE_MAX_LENGTH), analysis);
     });
 
     it('affiche le message serveur si l’envoi échoue', async () => {

@@ -146,6 +146,18 @@ describe('ClipService', () => {
 
       request.flush(fakeClip);
     });
+
+    it('déduit le type MIME de l’extension quand File.type est vide', () => {
+      const { clips, httpMock } = setup();
+
+      clips.upload(new File(['octets'], 'Chase.WEBM'), 'Sans type', analysis).subscribe();
+
+      const request = httpMock.expectOne('/api/clips');
+      const sent = (request.request.body as FormData).get('video') as File;
+      expect(sent.type).toBe('video/webm');
+      expect(sent.name).toBe('Chase.WEBM');
+      request.flush(fakeClip);
+    });
   });
 
   describe('video()', () => {
