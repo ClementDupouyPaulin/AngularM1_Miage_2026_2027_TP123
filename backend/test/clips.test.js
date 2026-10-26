@@ -214,8 +214,8 @@ test("upload MP4 : 201, statistiques recalculées et nom disque masqué", async 
   assert.equal(clip.originalName, "extrait.mp4");
   assert.equal(clip.cutCount, 3);
   assert.equal(clip.avgShotLength, 15);
-  assert.equal(clip.syncScore, 1.4);
-  assert.deepEqual(clip.analysis, validAnalysis());
+  assert.equal(clip.syncScore, 0);
+  assert.deepEqual(clip.analysis, validAnalysis({ syncScore: 0 }));
   assert.equal("storedName" in clip, false);
   assert.equal(JSON.stringify(clip).includes(store.get(clip.id).storedName), false);
   assert.equal(diskFiles().length, 1);
@@ -310,6 +310,38 @@ test("échec MongoDB après l'upload : vidéo supprimée du disque", async () =>
   const response = await uploadClip();
   assert.equal(response.status, 500);
   assert.deepEqual(diskFiles(), []);
+});
+
+test("syncScore recalculé côté serveur : parité avec l'algorithme du client", async () => {
+  const chanceCuts = [1, 3, ...Array.from({ length: 23 }, (_, index) => [2, 4, 6, 8][index % 4])].sort((a, b) => a - b);
+  const cases = [
+    // 2 coupes sur 25 près d'un beat = part attendue au hasard (0,08) : aucun lien.
+    { durationSec: 10, beats: [1, 3, 5, 7, 9], cuts: chanceCuts, expected: 1 },
+    // 3 coupes sur 4 calées sur des beats espacés : 0,75 / 0,08.
+    { durationSec: 10, beats: [1, 3, 5, 7, 9], cuts: [1, 3, 5, 6], expected: 9.375 },
+    // Fenêtres [0 ; 0,08] et [0,02 ; 0,18] : union 0,18 s (pas 0,24).
+    { durationSec: 1, beats: [0, 0.1], cuts: [0.15], expected: 1 / 0.18 },
+    // Plafond MAX_SYNC_SCORE.
+    { durationSec: 60, beats: [30], cuts: [30], expected: 10 },
+    { durationSec: 60, beats: [], cuts: [5], expected: null },
+    { durationSec: 60, beats: [5], cuts: [], expected: null },
+  ];
+  for (const { expected, ...analysis } of cases) {
+    const response = await uploadClip({ analysis: JSON.stringify(validAnalysis({ ...analysis, syncScore: null })) });
+    assert.equal(response.status, 201);
+    const { syncScore } = await response.json();
+    if (expected === null) assert.equal(syncScore, null);
+    else assert.ok(Math.abs(syncScore - expected) < 1e-9, `${syncScore} != ${expected}`);
+  }
+});
+
+test("syncScore fourni par un client qui triche : la valeur du serveur est stockée", async () => {
+  const response = await uploadClip({ analysis: JSON.stringify(validAnalysis({ syncScore: 9.9 })) });
+  assert.equal(response.status, 201);
+  const clip = await response.json();
+  assert.equal(clip.syncScore, 0);
+  assert.equal(clip.analysis.syncScore, 0);
+  assert.equal([...store.values()][0].syncScore, 0);
 });
 
 /* ---- Liste ---- */
@@ -407,6 +439,14 @@ test("vidéo : octets envoyés avec le type enregistré et nosniff", async () =>
   assert.equal(response.headers.get("content-type"), "video/mp4");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.deepEqual(Buffer.from(await response.arrayBuffer()), MP4);
+});
+
+test("vidéo absente du disque : 404 « Clip inconnu » au lieu de 500", async () => {
+  const clip = seedClip();
+  fs.unlinkSync(path.join(UPLOADS, store.get(clip.id).storedName));
+  const response = await api(`/api/clips/${clip.id}/video`, { token: aliceToken });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { message: "Clip inconnu" });
 });
 
 test("suppression : 204, métadonnée et fichier supprimés, puis 404", async () => {

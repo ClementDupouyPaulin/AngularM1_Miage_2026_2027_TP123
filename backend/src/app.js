@@ -75,6 +75,7 @@ const WEBM_SIGNATURE = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
 const MAX_CLIP_DURATION_SEC = 120;
 const MAX_ANALYSIS_POINTS = 2000;
 const MAX_SYNC_SCORE = 10;
+const SYNC_WINDOW_SEC = 0.08;
 const ANALYSIS_KEYS = ["version", "durationSec", "cuts", "beats", "syncScore"];
 
 const COVER_ATTRIBUTION =
@@ -250,6 +251,35 @@ function validateTimes(values, durationSec, name) {
   return values;
 }
 
+/** Durée totale (s) de l'union des fenêtres [b - w, b + w] bornées à [0, durée]. */
+function coveredDuration(beats, durationSec, windowSec) {
+  let covered = 0;
+  let end = 0;
+  for (const beat of [...beats].sort((a, b) => a - b)) {
+    const start = Math.max(0, beat - windowSec, end);
+    const stop = Math.min(durationSec, beat + windowSec);
+    if (stop > start) {
+      covered += stop - start;
+      end = stop;
+    }
+  }
+  return covered;
+}
+
+/**
+ * Portage de frontend-starter/src/app/shared/analysis/sync-score.ts : le score
+ * fourni par le client n'est pas fiable, le serveur le recalcule.
+ */
+function computeSyncScore(cuts, beats, durationSec, windowSec = SYNC_WINDOW_SEC) {
+  if (cuts.length === 0 || beats.length === 0 || !(durationSec > 0)) return null;
+
+  const hits = cuts.filter((cut) => beats.some((beat) => Math.abs(cut - beat) <= windowSec)).length;
+  const hitRate = hits / cuts.length;
+  const chanceRate = Math.min(1, coveredDuration(beats, durationSec, windowSec) / durationSec);
+  if (chanceRate === 0) return hitRate > 0 ? MAX_SYNC_SCORE : 0;
+  return Math.min(MAX_SYNC_SCORE, hitRate / chanceRate);
+}
+
 /** Analyse le champ texte `analysis` ; toute valeur hors contrat est refusée. */
 function parseAnalysis(raw) {
   if (typeof raw !== "string" || !raw) throw new HttpError(400, "Analyse requise");
@@ -294,7 +324,7 @@ function parseAnalysis(raw) {
     durationSec,
     cuts,
     beats,
-    syncScore,
+    syncScore: computeSyncScore(cuts, beats, durationSec),
     cutCount: cuts.length,
     avgShotLength: durationSec / (cuts.length + 1),
   };
@@ -1093,6 +1123,11 @@ export function createApp() {
       res.sendFile(path.join(UPLOADS, clip.storedName), (error) => {
         if (error) {
           console.error(`[clips] Erreur d'envoi vidéo ${clip.id}`, error);
+          if (error.code === "ENOENT" && !res.headersSent) {
+            res.removeHeader("Content-Type");
+            res.removeHeader("X-Content-Type-Options");
+            return res.status(404).json({ message: "Clip inconnu" });
+          }
           if (!res.headersSent) next(error);
           return;
         }
