@@ -198,7 +198,6 @@ export function toPublicAnnotation(annotation, userNames = new Map()) {
 
 /** Détail public : résumé, analyse v2, annotations triées et partage (propriétaire seul). */
 schema.methods.toPublic = function (context = {}) {
-  console.debug(`[clip-model] Préparation du clip public ${this.id}`);
   const userNames = context.userNames ?? new Map();
   const summary = toPublicClip(this, context);
   return {

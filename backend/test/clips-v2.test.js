@@ -13,6 +13,7 @@ process.chdir(workDir);
 const { createApp } = await import("../src/app.js");
 const { Clip } = await import("../src/models/Clip.js");
 const { User } = await import("../src/models/User.js");
+const { runPipeline } = await import("./fake-mongo.js");
 
 mongoose.set("bufferCommands", false);
 
@@ -141,35 +142,11 @@ Clip.prototype.save = async function save() {
   return this;
 };
 
-function matchesFilter(doc, match) {
-  if (!(match.ownerId instanceof mongoose.Types.ObjectId) || !match.ownerId.equals(doc.ownerId)) return false;
-  if (match.title && !new RegExp(match.title.$regex, match.title.$options).test(doc.title)) return false;
-  if (match.tags && !doc.tags.includes(match.tags)) return false;
-  if (match.visibility) {
-    const allowed = match.visibility.$in ?? [match.visibility];
-    if (!allowed.includes(doc.visibility ?? null)) return false;
-  }
-  return true;
-}
-
 const pipelines = [];
 mongoose.Aggregate.prototype.exec = async function exec() {
   const pipeline = this.pipeline();
   pipelines.push(pipeline);
-  const match = pipeline.find((stage) => stage.$match).$match;
-  const docsStages = pipeline.find((stage) => stage.$facet).$facet.docs;
-  const project = [...pipeline, ...docsStages].find((stage) => stage.$project).$project;
-  const skip = docsStages.find((stage) => "$skip" in stage).$skip;
-  const limit = docsStages.find((stage) => "$limit" in stage).$limit;
-  const rows = [...store.values()]
-    .filter((doc) => matchesFilter(doc, match))
-    .sort(byRecent)
-    .map((doc) => {
-      const row = { ...doc.toObject(), hasFilmstrip: typeof doc.filmstripStoredName === "string" };
-      for (const [key, value] of Object.entries(project)) if (value === 0) delete row[key];
-      return row;
-    });
-  return [{ docs: rows.slice(skip, skip + limit), count: rows.length ? [{ count: rows.length }] : [] }];
+  return runPipeline([...store.values()].map((doc) => doc.toObject()), pipeline);
 };
 
 let server, base;

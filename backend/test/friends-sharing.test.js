@@ -13,7 +13,8 @@ process.chdir(workDir);
 const { createApp } = await import("../src/app.js");
 const { Clip } = await import("../src/models/Clip.js");
 const { User } = await import("../src/models/User.js");
-const { Friendship, pairKeyOf } = await import("../src/models/Friendship.js");
+const { Friendship, pairKeyOf, inviteKeyOf } = await import("../src/models/Friendship.js");
+const { matches, fakeQuery, runPipeline } = await import("./fake-mongo.js");
 
 mongoose.set("bufferCommands", false);
 
@@ -31,79 +32,23 @@ for (const name of ["Alice", "Bob", "Carol", "Dave", "Eve"]) {
 const { alice, bob, carol, dave, eve } = people;
 const userById = (id) => Object.values(people).find((person) => String(person.id) === String(id));
 
-/* ---- Simulation de MongoDB : filtre générique pour les requêtes de l'application ---- */
+/* ---- Simulation de MongoDB (filtres et pipelines évalués par fake-mongo.js) ---- */
 
 const clips = new Map();
 const friendships = new Map();
-
-const getPath = (doc, key) => key.split(".").reduce((value, part) => (value == null ? undefined : value[part]), doc);
-
-function equals(actual, expected) {
-  if (expected === null) return actual === null || actual === undefined;
-  if (Array.isArray(actual)) return actual.some((value) => equals(value, expected));
-  return actual !== null && actual !== undefined && String(actual) === String(expected);
-}
-
-function matchesCondition(actual, condition) {
-  const isOperator =
-    condition && typeof condition === "object" && !(condition instanceof mongoose.Types.ObjectId) &&
-    !(condition instanceof Date) && Object.keys(condition).every((key) => key.startsWith("$"));
-  if (!isOperator) return equals(actual, condition);
-  return Object.entries(condition).every(([operator, value]) => {
-    switch (operator) {
-      case "$in": return value.some((item) => equals(actual, item));
-      case "$ne": return !equals(actual, value);
-      case "$exists": return (actual !== undefined) === value;
-      case "$gt": return actual > value;
-      case "$regex": return new RegExp(value, condition.$options).test(actual);
-      case "$options": return true;
-      case "$elemMatch": return Array.isArray(actual) && actual.some((item) => matches(item, value));
-      default: throw new Error(`Opérateur non simulé : ${operator}`);
-    }
-  });
-}
-
-function matches(doc, filter) {
-  return Object.entries(filter).every(([key, condition]) => {
-    if (key === "$or") return condition.some((sub) => matches(doc, sub));
-    if (key === "$and") return condition.every((sub) => matches(doc, sub));
-    return matchesCondition(getPath(doc, key), condition);
-  });
-}
-
-const compareBy = (spec) => (a, b) => {
-  for (const [key, direction] of Object.entries(spec)) {
-    if (a[key] < b[key]) return -direction;
-    if (a[key] > b[key]) return direction;
-  }
-  return 0;
-};
-
-function fakeQuery(result) {
-  let sortSpec = null;
-  let limit = 0;
-  return {
-    select() { return this; },
-    lean() { return this; },
-    sort(spec) { sortSpec = spec; return this; },
-    limit(value) { limit = value; return this; },
-    then(resolve, reject) {
-      let out = result;
-      if (Array.isArray(out)) {
-        out = [...out];
-        if (sortSpec) out.sort(compareBy(sortSpec));
-        if (limit) out = out.slice(0, limit);
-      }
-      return Promise.resolve(out).then(resolve, reject);
-    },
-  };
-}
+const duplicateKey = () => Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
 
 const plainClips = () => [...clips.values()].map((doc) => doc.toObject());
 const findClipDoc = (filter) => [...clips.values()].find((doc) => matches(doc.toObject(), filter)) ?? null;
 
 Clip.findOne = (filter) => fakeQuery(findClipDoc(filter));
 Clip.find = (filter) => fakeQuery(plainClips().filter((doc) => matches(doc, filter)));
+Clip.create = async (data) => {
+  const doc = new Clip(data);
+  await doc.validate();
+  clips.set(String(doc._id), doc);
+  return doc;
+};
 Clip.findOneAndDelete = (filter) => {
   const doc = findClipDoc(filter);
   if (doc) clips.delete(String(doc._id));
@@ -121,6 +66,12 @@ Clip.updateMany = async (filter, update) => {
   }
   return { acknowledged: true };
 };
+Clip.updateOne = async (filter, update) => {
+  const doc = findClipDoc(filter);
+  const [[field, values]] = Object.entries(update.$pullAll);
+  if (doc) doc[field] = doc[field].filter((id) => !values.some((value) => String(value) === String(id)));
+  return { acknowledged: true };
+};
 Clip.prototype.save = async function save() {
   await this.validate();
   clips.set(String(this._id), this);
@@ -128,48 +79,40 @@ Clip.prototype.save = async function save() {
 };
 
 mongoose.Aggregate.prototype.exec = async function exec() {
-  const pipeline = this.pipeline();
-  const { $match } = pipeline.find((stage) => stage.$match);
-  const docsStages = pipeline.find((stage) => stage.$facet).$facet.docs;
-  const { $sort } = [...pipeline, ...docsStages].find((stage) => stage.$sort);
-  const { $project } = [...pipeline, ...docsStages].find((stage) => stage.$project);
-  const skip = docsStages.find((stage) => "$skip" in stage).$skip;
-  const limit = docsStages.find((stage) => "$limit" in stage).$limit;
-  const rows = plainClips()
-    .filter((doc) => matches(doc, $match))
-    .sort(compareBy($sort))
-    .map((doc) => {
-      const row = { ...doc, hasFilmstrip: typeof doc.filmstripStoredName === "string" };
-      for (const [key, value] of Object.entries($project)) if (value === 0) delete row[key];
-      return row;
-    });
-  return [{ docs: rows.slice(skip, skip + limit), count: rows.length ? [{ count: rows.length }] : [] }];
+  return runPipeline(plainClips(), this.pipeline());
 };
 
-Friendship.find = (filter) => fakeQuery([...friendships.values()].filter((doc) => matches(doc, filter)));
-Friendship.exists = (filter) => {
-  const doc = [...friendships.values()].find((item) => matches(item, filter));
-  return fakeQuery(doc ? { _id: doc._id } : null);
-};
+const allFriendships = () => [...friendships.values()];
+const findFriendship = (filter) => allFriendships().find((doc) => matches(doc, filter)) ?? null;
+
+Friendship.find = (filter) => fakeQuery(allFriendships().filter((doc) => matches(doc, filter)));
+Friendship.findOne = (filter) => fakeQuery(findFriendship(filter));
+Friendship.exists = (filter) => fakeQuery(findFriendship(filter) ? { _id: findFriendship(filter)._id } : null);
+Friendship.countDocuments = async (filter) => allFriendships().filter((doc) => matches(doc, filter)).length;
 Friendship.create = async (data) => {
   const doc = new Friendship(data);
   await doc.validate();
-  if ([...friendships.values()].some((item) => item.pairKey === doc.pairKey)) {
-    throw Object.assign(new Error("E11000 duplicate key"), { code: 11000 });
-  }
-  const plain = { ...doc.toObject(), createdAt: new Date() };
-  friendships.set(String(doc._id), plain);
+  if (allFriendships().some((item) => item.inviteKey === doc.inviteKey)) throw duplicateKey();
+  friendships.set(String(doc._id), { ...doc.toObject(), createdAt: new Date() });
   return doc;
 };
 Friendship.findOneAndUpdate = (filter, update) => {
-  const doc = [...friendships.values()].find((item) => matches(item, filter)) ?? null;
+  const doc = findFriendship(filter);
+  if (doc && update.$set.pairKey && allFriendships().some((item) => item !== doc && item.pairKey === update.$set.pairKey)) {
+    throw duplicateKey();
+  }
   if (doc) Object.assign(doc, update.$set);
   return fakeQuery(doc ? { ...doc } : null);
 };
 Friendship.findOneAndDelete = (filter) => {
-  const doc = [...friendships.values()].find((item) => matches(item, filter)) ?? null;
+  const doc = findFriendship(filter);
   if (doc) friendships.delete(String(doc._id));
   return fakeQuery(doc);
+};
+Friendship.deleteOne = async (filter) => {
+  const doc = findFriendship(filter);
+  if (doc) friendships.delete(String(doc._id));
+  return { deletedCount: doc ? 1 : 0 };
 };
 
 User.find = (filter) =>
@@ -248,18 +191,23 @@ function seedClip(owner, { visibility = "private", sharedWith = [], title = "Cli
   return doc;
 }
 
+/** Invitation de `requester` vers l'e-mail de `recipient` (ou une adresse), acceptée par défaut. */
 function seedFriendship(requester, recipient, status = "accepted") {
   const _id = new mongoose.Types.ObjectId();
   const createdAt = nextDate();
+  const recipientEmail = typeof recipient === "string" ? recipient : recipient.email;
+  const accepted = status === "accepted";
   const doc = {
     _id,
     requester: requester.id,
-    recipient: recipient.id,
-    pairKey: pairKeyOf(requester.id, recipient.id),
+    recipientEmail,
+    recipient: accepted ? recipient.id : null,
+    inviteKey: inviteKeyOf(requester.id, recipientEmail),
     status,
-    acceptedAt: status === "accepted" ? createdAt : null,
+    acceptedAt: accepted ? createdAt : null,
     createdAt,
   };
+  if (accepted) doc.pairKey = pairKeyOf(requester.id, recipient.id);
   friendships.set(String(_id), doc);
   return doc;
 }
@@ -511,61 +459,80 @@ test("GET /friends : amis acceptés et demandes reçues ou envoyées", async () 
     },
   ]);
   assert.deepEqual(
-    overview.requests.map(({ id, user, direction }) => ({ id, name: user.name, direction })),
+    overview.requests.map(({ id, user, direction }) => ({ id, user, direction })),
     [
-      { id: String(toDave._id), name: "Dave", direction: "outgoing" },
-      { id: String(fromCarol._id), name: "Carol", direction: "incoming" },
+      { id: String(toDave._id), user: { id: String(toDave._id), name: dave.email, email: dave.email }, direction: "outgoing" },
+      {
+        id: String(fromCarol._id),
+        user: { id: String(carol.id), name: "Carol", email: carol.email },
+        direction: "incoming",
+      },
     ],
   );
   assert.ok(overview.requests[0].createdAt);
-  assert.doesNotMatch(JSON.stringify(overview), /eve@example\.com/);
+  assert.doesNotMatch(JSON.stringify(overview), /eve@example\.com|"Dave"/);
 });
 
-test("invitation : 202 générique que le compte existe ou non, e-mail normalisé", async () => {
-  const unknown = await api("/api/friends/requests", {
-    method: "POST",
-    token: alice.token,
-    json: { email: "personne@example.com" },
-  });
-  const known = await api("/api/friends/requests", {
-    method: "POST",
-    token: alice.token,
-    json: { email: "  BOB@Example.COM " },
-  });
+const invite = (email, token = alice.token) =>
+  api("/api/friends/requests", { method: "POST", token, json: { email } });
+
+test("invitation : 202 générique et demande enregistrée à l'identique que le compte existe ou non", async () => {
+  const unknown = await invite("personne@example.com");
+  const known = await invite("  BOB@Example.COM ");
   assert.equal(unknown.status, 202);
   assert.equal(known.status, 202);
   const expected = { message: "Si ce compte existe, une invitation a été envoyée." };
   assert.deepEqual(await unknown.json(), expected);
   assert.deepEqual(await known.json(), expected);
-  const [created] = friendships.values();
-  assert.equal(friendships.size, 1);
-  assert.equal(String(created.requester), String(alice.id));
-  assert.equal(String(created.recipient), String(bob.id));
-  assert.equal(created.status, "pending");
+  assert.deepEqual(
+    allFriendships().map(({ recipientEmail, recipient, status }) => ({ recipientEmail, recipient, status })),
+    [
+      { recipientEmail: "personne@example.com", recipient: null, status: "pending" },
+      { recipientEmail: "bob@example.com", recipient: null, status: "pending" },
+    ],
+  );
+
+  const { requests } = await (await api("/api/friends", { token: alice.token })).json();
+  const shape = ({ id, user, direction }) => ({ sameId: user.id === id, keys: Object.keys(user), direction, nameIsEmail: user.name === user.email });
+  assert.equal(requests.length, 2);
+  assert.deepEqual(shape(requests[0]), shape(requests[1]));
+  assert.doesNotMatch(JSON.stringify(requests), new RegExp(`Bob|${bob.id}`));
 });
 
-test("invitation : 400 soi-même ou e-mail invalide, 409 si une relation existe dans un sens ou l'autre", async () => {
-  for (const json of [{ email: "alice@example.com" }, { email: " ALICE@example.com" }]) {
-    await expectError(await api("/api/friends/requests", { method: "POST", token: alice.token, json }), 400, /vous-même/);
+test("invitation : renvoyer la même invitation = 202 sans doublon", async () => {
+  for (const email of ["bob@example.com", "BOB@example.com", "inconnu@example.com", "inconnu@example.com"]) {
+    assert.equal((await invite(email)).status, 202);
   }
-  for (const json of [{}, { email: "" }, { email: "pas-un-mail" }, { email: 42 }, { email: `${"a".repeat(250)}@x.fr` }]) {
+  assert.equal(friendships.size, 2);
+});
+
+test("invitation : 400 soi-même ou e-mail invalide, 409 seulement pour une relation connue", async () => {
+  for (const email of ["alice@example.com", " ALICE@example.com"]) {
+    await expectError(await invite(email), 400, /vous-même/);
+  }
+  for (const json of [{}, { email: "" }, { email: "pas-un-mail" }, { email: 42 }, { email: `${"a".repeat(250)}@x.fr` }, { email: { $ne: null } }, { email: ["bob@example.com"] }]) {
     await expectError(await api("/api/friends/requests", { method: "POST", token: alice.token, json }), 400, /E-mail invalide/);
   }
   seedFriendship(bob, alice, "pending");
-  seedFriendship(alice, carol);
-  for (const email of ["bob@example.com", "carol@example.com"]) {
-    await expectError(
-      await api("/api/friends/requests", { method: "POST", token: alice.token, json: { email } }),
-      409,
-      /déjà amis ou une invitation/,
-    );
-  }
-  await expectError(
-    await api("/api/friends/requests", { method: "POST", token: bob.token, json: { email: "alice@example.com" } }),
-    409,
-    /déjà/,
-  );
+  seedFriendship(carol, alice);
+  await expectError(await invite("bob@example.com"), 409, /vous a déjà invité/);
+  await expectError(await invite("carol@example.com"), 409, /déjà amis/);
+  await expectError(await invite("alice@example.com", carol.token), 409, /déjà amis/);
+  assert.equal((await invite("alice@example.com", bob.token)).status, 202);
   assert.equal(friendships.size, 2);
+});
+
+test("invitation : 50 demandes en attente maximum par émetteur (429)", async () => {
+  for (let index = 0; index < 50; index += 1) seedFriendship(alice, `invite${index}@example.com`, "pending");
+  await expectError(await invite("encore@example.com"), 429, /50 maximum/);
+  assert.equal((await invite("invite3@example.com")).status, 202);
+  assert.equal(friendships.size, 50);
+});
+
+test("GET /friends : 200 entrées au plus par liste", async () => {
+  for (let index = 0; index < 205; index += 1) seedFriendship(alice, `n${index}@example.com`, "pending");
+  const { requests } = await (await api("/api/friends", { token: alice.token })).json();
+  assert.equal(requests.length, 200);
 });
 
 test("accepter : destinataire seulement ; mauvais utilisateur, déjà acceptée ou id invalide = 404", async () => {
@@ -584,11 +551,25 @@ test("accepter : destinataire seulement ; mauvais utilisateur, déjà acceptée 
   assert.equal(entry.friendshipId, String(request._id));
   assert.deepEqual(entry.user, { id: String(alice.id), name: "Alice", email: "alice@example.com" });
   assert.ok(entry.since);
-  assert.equal(friendships.get(String(request._id)).status, "accepted");
+  const stored = friendships.get(String(request._id));
+  assert.equal(stored.status, "accepted");
+  assert.equal(String(stored.recipient), String(bob.id));
+  assert.equal(stored.pairKey, pairKeyOf(alice.id, bob.id));
+  assert.equal((await api(`/api/clips/${seedClip(alice, { visibility: "shared", sharedWith: [bob] }).id}`, { token: bob.token })).status, 200);
 
   for (const id of [request._id, "pas-un-id", String(new mongoose.Types.ObjectId())]) {
     await expectError(await api(`/api/friends/requests/${id}/accept`, { method: "POST", token: bob.token }), 404, /^Demande inconnue$/);
   }
+});
+
+test("accepter : l'e-mail du JWT doit être celui invité ; invitation croisée retirée", async () => {
+  const request = seedFriendship(alice, bob, "pending");
+  const crossed = seedFriendship(bob, alice, "pending");
+  const impostor = jwt.sign({ sub: String(bob.id), email: "autre@example.com" }, SECRET);
+  await expectError(await api(`/api/friends/requests/${request._id}/accept`, { method: "POST", token: impostor }), 404, /^Demande inconnue$/);
+  assert.equal((await api(`/api/friends/requests/${request._id}/accept`, { method: "POST", token: bob.token })).status, 200);
+  assert.equal(friendships.has(String(crossed._id)), false);
+  assert.equal(friendships.size, 1);
 });
 
 test("DELETE /friends/:id : refuser ou annuler une demande ; tiers ou id invalide = 404", async () => {
@@ -655,7 +636,7 @@ test("discover : tris nervous et synced, filtres q et tag", async () => {
 });
 
 test("discover : paramètres invalides = 400", async () => {
-  for (const query of ["scope=private", "scope=mine", "sort=random", "sort=__proto__", `q=${"a".repeat(101)}`, "tag=%20", "visibility=private", "scope=public&scope=friends"]) {
+  for (const query of ["scope=private", "scope=mine", "sort=random", "sort=__proto__", "q=a&q=b", "sort=recent&sort=nervous", "tag=a&tag=b", `q=${"a".repeat(101)}`, "tag=%20", "visibility=private", "scope=public&scope=friends"]) {
     await expectError(await api(`/api/clips/discover?${query}`, { token: alice.token }), 400, /invalide|limitée|non disponible/);
   }
 });
@@ -704,4 +685,131 @@ test("activity : limite hors [1, 50] = 400", async () => {
     await expectError(await api(`/api/activity?limit=${limit}`, { token: alice.token }), 400, /Limite invalide/);
   }
   assert.equal((await api("/api/activity?limit=50", { token: alice.token })).status, 200);
+});
+
+/* ---- Revue : injections, limites, ex-amis ---- */
+
+test("injections : opérateurs MongoDB refusés (sharedWith) ou sans effet (clés q[…] ignorées)", async () => {
+  seedCircle();
+  const clip = seedClip(alice);
+  for (const sharedWith of [[{ $gt: "" }], { $ne: null }, [String(bob.id), { $in: [] }]]) {
+    await expectError(
+      await api(`/api/clips/${clip.id}`, { method: "PATCH", token: alice.token, json: { visibility: "shared", sharedWith } }),
+      400,
+      /Partage invalide/,
+    );
+  }
+  assert.deepEqual(clips.get(clip.id).sharedWith, []);
+  seedClip(bob, { visibility: "public", title: "Public" });
+  seedClip(bob, { title: "Privé" });
+  assert.deepEqual(titles(await discover("scope=public&q[$ne]=x&q[]=a")), ["Public"]);
+});
+
+test("PUT analysis : corps JSON de plus de 1 Mo = 413", async () => {
+  const clip = seedClip(alice);
+  const response = await api(`/api/clips/${clip.id}/analysis`, {
+    method: "PUT",
+    token: alice.token,
+    json: { version: 2, padding: "x".repeat(1024 * 1024 + 1) },
+  });
+  await expectError(response, 413, /trop volumineuse/);
+});
+
+test("ex-ami : ni lecture ni ajout ni suppression d'annotation (404)", async () => {
+  const clip = seedClip(alice, {
+    visibility: "shared",
+    sharedWith: [dave],
+    annotations: [{ time: 1, text: "De Dave", authorId: dave.id }],
+  });
+  const [note] = clip.annotations;
+  await expectUnknownClip(
+    await api(`/api/clips/${clip.id}/annotations`, { method: "POST", token: dave.token, json: { time: 1, text: "x" } }),
+  );
+  await expectUnknownClip(await api(`/api/clips/${clip.id}/annotations/${note.id}`, { method: "DELETE", token: dave.token }));
+  assert.deepEqual(clips.get(clip.id).annotations.map((item) => item.text), ["De Dave"]);
+});
+
+test("activity : aucun clip d'un ex-ami ni d'une demande en attente", async () => {
+  seedFriendship(alice, carol, "pending");
+  seedFriendship(eve, alice, "pending");
+  seedClip(dave, { visibility: "shared", sharedWith: [alice], title: "Dave partagé" });
+  seedClip(carol, { visibility: "shared", sharedWith: [alice], title: "Carol partagé" });
+  seedClip(eve, { visibility: "shared", sharedWith: [alice], title: "Eve partagé" });
+  const events = await (await api("/api/activity", { token: alice.token })).json();
+  assert.deepEqual(events, []);
+});
+
+test("PATCH sharedWith : un destinataire dont l'amitié disparaît pendant l'écriture est retiré", async () => {
+  seedCircle();
+  const clip = seedClip(alice);
+  const original = Friendship.find;
+  let calls = 0;
+  Friendship.find = (filter) => {
+    calls += 1;
+    if (calls === 2) friendships.clear();
+    return original(filter);
+  };
+  try {
+    const response = await api(`/api/clips/${clip.id}`, {
+      method: "PATCH",
+      token: alice.token,
+      json: { visibility: "shared", sharedWith: [String(bob.id)] },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).sharedWith, []);
+  } finally {
+    Friendship.find = original;
+  }
+  assert.deepEqual(clips.get(clip.id).sharedWith, []);
+});
+
+/* ---- Upload : limites multipart et format ---- */
+
+const ANALYSIS = JSON.stringify({ version: 1, durationSec: 30, cuts: [5], beats: [], syncScore: null });
+
+function uploadForm(fields) {
+  const data = new FormData();
+  for (const [name, value] of fields) {
+    if (typeof value === "string") data.append(name, value);
+    else data.append(name, new Blob([value.bytes], { type: value.type }), value.name);
+  }
+  return api("/api/clips", { method: "POST", token: alice.token, body: data });
+}
+
+const video = (bytes = MP4) => ["video", { bytes, type: "video/mp4", name: "v.mp4" }];
+const diskFiles = () => fs.readdirSync(UPLOADS).filter((name) => name !== "covers");
+
+test("upload : marques ISO-BMFF MP4 acceptées, MOV, HEIC et 3GP refusés", async () => {
+  const withBrand = (brand) =>
+    Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from(`ftyp${brand}`, "latin1"), Buffer.alloc(32, 1)]);
+  for (const brand of ["mp42", "avc1", "M4V ", "dash"]) {
+    assert.equal((await uploadForm([video(withBrand(brand)), ["analysis", ANALYSIS]])).status, 201, brand);
+  }
+  for (const brand of ["qt  ", "heic", "3gp4", "mif1"]) {
+    await expectError(await uploadForm([video(withBrand(brand)), ["analysis", ANALYSIS]]), 400, /Fichier vidéo invalide/);
+  }
+  assert.equal(diskFiles().length, 4);
+});
+
+test("upload : trop de champs, champ texte de plus de 256 ko ou trop de parties = 400 sans fichier", async () => {
+  const extra = Array.from({ length: 8 }, (_, index) => [`champ${index}`, "x"]);
+  await expectError(await uploadForm([video(), ["analysis", ANALYSIS], ...extra]), 400, /trop de champs|trop de parties/);
+  await expectError(await uploadForm([video(), ["analysis", ANALYSIS], ["title", "t".repeat(256 * 1024 + 1)]]), 400, /trop long/);
+  assert.deepEqual(diskFiles(), []);
+});
+
+test("upload : une pellicule de plus de 1 Mo est coupée et supprimée, vidéo comprise", async () => {
+  const big = Buffer.concat([JPEG, Buffer.alloc(1024 * 1024 + 1)]);
+  await expectError(
+    await uploadForm([video(), ["filmstrip", { bytes: big, type: "image/jpeg", name: "f.jpg" }], ["analysis", ANALYSIS]]),
+    400,
+    /Pellicule trop volumineuse/,
+  );
+  assert.deepEqual(diskFiles(), []);
+});
+
+test("ValidationError Mongoose : message générique", async () => {
+  const response = await uploadForm([video(), ["analysis", ANALYSIS], ["title", "t".repeat(201)]]);
+  await expectError(response, 400, /^Données invalides$/);
+  assert.deepEqual(diskFiles(), []);
 });
