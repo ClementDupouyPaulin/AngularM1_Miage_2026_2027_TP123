@@ -1,326 +1,383 @@
-<section class="page">
-  <div class="hero">
-    <p class="eyebrow">Film Pulse</p>
-    <h1>Mes extraits</h1>
-    <p>Analysez le rythme de montage d’un extrait de film, puis retrouvez-le dans votre liste.</p>
-    <p class="hero-link"><a routerLink="/clips/compare">Comparer deux extraits →</a></p>
-  </div>
+<section class="page studio">
+  <p class="visually-hidden" aria-live="polite">{{ announcement() }}</p>
 
-  <section class="card upload-card" aria-labelledby="upload-heading">
-    <h2 id="upload-heading">Analyser un extrait</h2>
-
-    <ol class="steps" aria-label="Étapes">
-      <li [class.done]="file() !== undefined && !fileError()">Choisir</li>
-      <li [class.active]="analyzing()" [class.done]="analysis() !== null">Analyser</li>
-      <li [class.active]="uploading()">Envoyer</li>
-    </ol>
-
-    <div class="upload-layout">
-      <div
-        class="dropzone"
-        [class.dragging]="dragging()"
-        [class.has-file]="file() !== undefined"
-        [class.disabled]="busy()"
-        (dragover)="onDragOver($event)"
-        (dragleave)="onDragLeave()"
-        (drop)="onDrop($event)"
-      >
-        <input
-          id="clip-file"
-          #fileInput
-          class="visually-hidden"
-          type="file"
-          [accept]="acceptAttribute"
-          [attr.aria-describedby]="fileError() ? 'file-hint file-error' : 'file-hint'"
-          [attr.aria-invalid]="fileError() ? 'true' : null"
-          [disabled]="busy()"
-          (change)="choose($event)"
-        />
-        <label for="clip-file" class="dropzone-label">
-          <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path
-              d="M4 5h11a1 1 0 0 1 1 1v3.5l4-2.5v10l-4-2.5V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"
-              fill="currentColor"
-            />
-          </svg>
-          <span class="dropzone-title">
-            Glissez une vidéo ici ou <span class="dropzone-link">parcourez vos fichiers</span>
-          </span>
-          <span class="hint" id="file-hint">
-            MP4 ou WebM — {{ maxFileSizeLabel }} et {{ maxDurationSec }} secondes maximum.
-          </span>
-        </label>
-
-        @if (file(); as selected) {
-          <p class="file-chip">
-            <span class="visually-hidden">Fichier sélectionné :</span>
-            <span class="file-name">{{ selected.name }}</span>
-            <span class="badge">{{ formatSize(selected.size) }}</span>
-          </p>
-        }
-        @if (fileError()) {
-          <p class="field-error" id="file-error" role="alert">{{ fileError() }}</p>
-        }
-      </div>
-
-      <div class="upload-fields">
-        <label for="clip-title">
-          Titre
-          <input
-            id="clip-title"
-            [formControl]="title"
-            [attr.maxlength]="titleMaxLength"
-            autocomplete="off"
-            aria-describedby="title-hint"
-          />
-        </label>
-        <p class="hint" id="title-hint">
-          {{ titleMaxLength }} caractères maximum. Laissé vide, le nom du fichier est utilisé.
-        </p>
-
-        <div class="actions">
-          @if (analyzing()) {
-            <button type="button" class="btn-secondary cancel" (click)="cancelAnalysis()">
-              Annuler l’analyse
-            </button>
-          } @else {
-            <button type="button" class="analyze" (click)="analyze()" [disabled]="!canAnalyze()">
-              Analyser
-            </button>
-          }
-          <button
-            type="button"
-            class="send"
-            (click)="upload()"
-            [disabled]="!canUpload()"
-            [attr.aria-busy]="uploading()"
-          >
-            {{ uploading() ? 'Envoi en cours…' : 'Envoyer' }}
-          </button>
-        </div>
-
-        @if (analyzing()) {
-          <div class="progress-zone">
-            <progress
-              class="progress analysis-progress"
-              max="100"
-              [value]="analysisProgress()"
-              aria-label="Progression de l’analyse"
-            ></progress>
-            <p class="hint">Analyse en cours : {{ analysisProgress() }} %</p>
-          </div>
-        }
-
-        @if (uploading()) {
-          <div class="progress-zone">
-            @if (uploadProgress() !== null) {
-              <progress
-                class="progress upload-progress"
-                max="100"
-                [value]="uploadProgress()"
-                aria-label="Progression de l’envoi"
-              ></progress>
-              <p class="hint">{{ uploadProgress() }} % des octets transmis</p>
-            } @else {
-              <progress class="progress upload-progress" aria-label="Progression de l’envoi"></progress>
-              <p class="hint">Envoi en cours…</p>
-            }
-          </div>
-        }
-      </div>
+  <!-- 1. Tableau de bord ------------------------------------------------------ -->
+  <header class="hero studio-hero" aria-labelledby="studio-heading">
+    <div class="hero-head">
+      <p class="eyebrow"><span class="rec-dot" aria-hidden="true"></span> Film Pulse · Studio</p>
+      <h1 id="studio-heading">Studio</h1>
+      <p>Importez un extrait, regardez son pouls se dessiner, réglez la détection, puis rangez-le dans votre bibliothèque.</p>
+      <svg class="ecg" viewBox="0 0 120 16" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path class="ecg-base" d="M0 8h120" />
+        <path pathLength="100" d="M0 8h34l4-5 5 10 4-13 4 14 3-6h66" />
+      </svg>
     </div>
 
-    @if (analysis(); as result) {
-      <section class="result" aria-labelledby="result-heading">
-        <h3 id="result-heading" #resultHeading tabindex="-1">Résultat de l’analyse</h3>
-        <dl class="stats">
-          <div class="stat">
-            <dt>Coupes</dt>
-            <dd class="stat-cuts">{{ cutCount() }}</dd>
-          </div>
-          <div class="stat">
-            <dt>Plan moyen</dt>
-            <dd class="stat-asl">{{ formatDecimal(avgShot(), 1) }} s</dd>
-          </div>
-          <div class="stat">
-            <dt>Beats</dt>
-            <dd class="stat-beats">{{ beatCount() }}</dd>
-          </div>
-          <div class="stat">
-            <dt>Synchro</dt>
-            <dd class="stat-sync">
-              @if (result.syncScore !== null) {
-                <span class="score">{{ formatDecimal(result.syncScore, 2) }}</span>
-              } @else {
-                <span class="score">—</span>
-              }
-              <span class="sync-label">{{ syncLabel() }}</span>
-            </dd>
-          </div>
-        </dl>
-        <p class="hint">Durée analysée : {{ formatDuration(result.durationSec) }}</p>
-      </section>
-    }
-
-    <p class="status" role="status" aria-live="polite">
-      @if (analyzing()) {
-        Analyse de la vidéo en cours…
-      } @else if (uploading()) {
-        Envoi de l’extrait en cours, merci de patienter…
-      } @else if (analysisNotice()) {
-        <span class="notice">{{ analysisNotice() }}</span>
+    @if (stats(); as s) {
+      <dl class="hero-stats">
+        <div class="stat"><dt class="stat-label">Extraits</dt><dd class="stat-value stat-clips">{{ s.clipCount }}</dd></div>
+        <div class="stat">
+          <dt class="stat-label">Durée totale</dt>
+          <dd class="stat-value timecode stat-total-duration">{{ formatTimecode(s.totalDurationSec) }}</dd>
+        </div>
+        <div class="stat"><dt class="stat-label">Coupes</dt><dd class="stat-value stat-total-cuts">{{ s.totalCuts }}</dd></div>
+        <div class="stat">
+          <dt class="stat-label">Plan moyen</dt>
+          <dd class="stat-value stat-mean-shot">{{ s.avgShotLength === null ? '—' : formatDecimal(s.avgShotLength, 1) + ' s' }}</dd>
+        </div>
+      </dl>
+      @if (s.mostNervous || s.mostSynced) {
+        <p class="hero-records">
+          @if (s.mostNervous; as nervous) {
+            <a class="chip chip-rec record-nervous" [routerLink]="['/clips', nervous.id]">
+              <span aria-hidden="true">⚡</span> Le plus nerveux : {{ nervous.title }}
+            </a>
+          }
+          @if (s.mostSynced; as synced) {
+            <a class="chip chip-beat record-synced" [routerLink]="['/clips', synced.id]">
+              <span aria-hidden="true">♪</span> Le plus calé : {{ synced.title }}
+            </a>
+          }
+        </p>
       }
-    </p>
+    } @else if (statsError()) {
+      <p class="hero-error">{{ statsError() }} <button type="button" class="btn btn-secondary" (click)="loadStats()">Réessayer</button></p>
+    } @else {
+      <div class="hero-stats" aria-hidden="true">
+        @for (i of [0, 1, 2, 3]; track i) {
+          <div class="skeleton stat-skeleton"></div>
+        }
+      </div>
+    }
+  </header>
 
+  <!-- 2. Import ------------------------------------------------------------------ -->
+  <section class="card import-card" aria-labelledby="import-heading">
+    <div class="section-head">
+      <h2 id="import-heading">Importer un extrait</h2>
+      <ol class="steps" aria-label="Étapes">
+        <li [class.done]="file() !== undefined && !fileError()">Déposer</li>
+        <li [class.active]="analyzing()" [class.done]="analysis() !== null">Analyser</li>
+        <li [class.active]="analysis() !== null && !uploading()">Régler</li>
+        <li [class.active]="uploading()">Envoyer</li>
+      </ol>
+    </div>
+
+    <div
+      class="dropzone"
+      [class.dragging]="dragging()"
+      [class.has-file]="file() !== undefined"
+      [class.disabled]="busy()"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave()"
+      (drop)="onDrop($event)"
+    >
+      <input
+        id="clip-file"
+        #fileInput
+        class="visually-hidden"
+        type="file"
+        [accept]="acceptAttribute"
+        [attr.aria-describedby]="fileError() ? 'file-hint file-error' : 'file-hint'"
+        [attr.aria-invalid]="fileError() ? 'true' : null"
+        [disabled]="busy()"
+        (change)="choose($event)"
+      />
+      <label for="clip-file" class="dropzone-label">
+        <svg class="dropzone-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M4 5h11a1 1 0 0 1 1 1v3.5l4-2.5v10l-4-2.5V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" fill="currentColor" />
+        </svg>
+        <span class="dropzone-title">Glissez une vidéo ici ou <span class="dropzone-link">parcourez vos fichiers</span></span>
+        <span class="hint" id="file-hint">MP4 ou WebM — {{ maxFileSizeLabel }} et {{ maxDurationSec }} secondes maximum. L’analyse démarre aussitôt.</span>
+      </label>
+      @if (file(); as selected) {
+        <p class="file-chip">
+          <span class="visually-hidden">Fichier sélectionné :</span>
+          <span class="file-name">{{ selected.name }}</span>
+          <span class="badge">{{ formatSize(selected.size) }}</span>
+        </p>
+      }
+      @if (fileError()) {
+        <p class="field-error" id="file-error" role="alert">{{ fileError() }}</p>
+      }
+    </div>
+
+    <p class="visually-hidden" role="status">{{ analysisNotice() }}</p>
     @if (analysisError()) {
       <p class="alert alert-error analysis-error" role="alert">{{ analysisError() }}</p>
     }
-    @if (uploadError()) {
-      <p class="alert alert-error upload-error" role="alert">{{ uploadError() }}</p>
+    @if (canAnalyze()) {
+      <p class="actions"><button type="button" class="btn btn-secondary analyze" (click)="analyze()">Relancer l’analyse</button></p>
+    }
+
+    @if (analyzing()) {
+      <div class="live" aria-labelledby="live-heading">
+        <div class="live-head">
+          <h3 id="live-heading"><span class="rec-dot" aria-hidden="true"></span> Analyse en direct</h3>
+          <span class="timecode live-time" aria-hidden="true">{{ liveTime() }}</span>
+          <button type="button" class="btn btn-secondary cancel" (click)="cancelAnalysis()">Annuler l’analyse</button>
+        </div>
+        <svg class="live-curve" [attr.viewBox]="liveViewBox" preserveAspectRatio="none" role="img" aria-label="Différences entre images successives, en cours de calcul" focusable="false">
+          <line class="live-base" x1="0" x2="100" y1="40" y2="40" />
+          @if (livePath()) {
+            <path class="live-line" [attr.d]="livePath()" />
+          }
+        </svg>
+        <svg class="live-palette" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          @for (swatch of liveColors(); track $index) {
+            <rect [attr.x]="swatch.x" y="0" [attr.width]="swatch.width" height="4" [attr.fill]="swatch.color" />
+          }
+        </svg>
+        <progress class="progress analysis-progress" max="100" [value]="analysisProgress()" aria-label="Progression de l’analyse"></progress>
+        <p class="hint">Analyse en cours : {{ analysisProgress() }} % · {{ liveSamples().length }} images lues</p>
+      </div>
+    }
+
+    @if (analysis(); as result) {
+      <div class="result">
+        <h3 class="result-heading" #resultHeading tabindex="-1">Résultat de l’analyse</h3>
+
+        <dl class="result-stats">
+          <div class="stat"><dt class="stat-label">Coupes</dt><dd class="stat-value stat-cuts">{{ result.cuts.length }}</dd></div>
+          <div class="stat">
+            <dt class="stat-label">Plan moyen</dt>
+            <dd class="stat-value stat-asl">{{ formatDecimal(rhythm()?.averageShotLength ?? 0, 1) }} s</dd>
+          </div>
+          <div class="stat"><dt class="stat-label">Beats</dt><dd class="stat-value stat-beats">{{ result.beats.length }}</dd></div>
+          <div class="stat">
+            <dt class="stat-label">Synchro</dt>
+            <dd class="stat-sync">
+              <span class="stat-value">{{ result.syncScore === null ? '—' : '×' + formatDecimal(result.syncScore, 1) }}</span>
+              <span class="chip" [class.chip-success]="synced()">{{ syncLabel() }}</span>
+            </dd>
+          </div>
+          <div class="stat">
+            <dt class="stat-label">Rythme</dt>
+            <dd class="stat-rhythm"><span class="chip rhythm" [attr.data-tone]="rhythm()?.tone">{{ rhythm()?.label }}</span></dd>
+          </div>
+          <div class="stat">
+            <dt class="stat-label">Musique · montage</dt>
+            <dd class="stat-tempo">
+              <span class="stat-value">{{ tempo() === null ? '—' : tempo() + ' BPM' }}</span>
+              <span class="hint">{{ formatDecimal(rhythm()?.cutsPerMinute ?? 0, 1) }} coupes/min</span>
+            </dd>
+          </div>
+        </dl>
+        @if (beatsPerCut(); as ratio) {
+          <p class="hint tempo-ratio">Environ une coupe tous les {{ formatDecimal(ratio, 1) }} temps musicaux.</p>
+        }
+
+        <app-pulse-timeline [analysis]="result" [filmstripUrl]="filmstripUrl()" label="Timeline de l’extrait analysé" />
+        <app-filmstrip [url]="filmstripUrl()" [analysis]="result" />
+
+        <div class="field sensitivity">
+          <label for="clip-sensitivity">
+            Sensibilité de détection
+            <span class="hint">k = {{ formatDecimal(sensitivity(), 1) }} · {{ result.cuts.length }} coupes</span>
+          </label>
+          <input
+            id="clip-sensitivity"
+            type="range"
+            [min]="minK"
+            [max]="maxK"
+            [step]="sensitivityStep"
+            [value]="sensitivityLevel()"
+            [disabled]="uploading()"
+            [attr.aria-valuetext]="'k = ' + formatDecimal(sensitivity(), 1) + ', ' + result.cuts.length + ' coupes'"
+            aria-describedby="sensitivity-hint"
+            (input)="onSensitivityInput($event)"
+          />
+          <p class="range-labels hint" id="sensitivity-hint" aria-hidden="true"><span>Moins de coupes</span><span>Plus de coupes</span></p>
+        </div>
+
+        <div class="meta-grid">
+          <div class="field">
+            <label for="clip-title">Titre</label>
+            <input id="clip-title" [formControl]="title" [attr.maxlength]="titleMaxLength" autocomplete="off" aria-describedby="title-hint" />
+            <p class="hint" id="title-hint">{{ titleMaxLength }} caractères maximum. Laissé vide, le nom du fichier est utilisé.</p>
+          </div>
+
+          <div class="field">
+            <label for="clip-tag">Étiquettes</label>
+            @if (tags().length) {
+              <ul class="tag-list" aria-label="Étiquettes ajoutées">
+                @for (tag of tags(); track tag) {
+                  <li class="chip chip-fade">
+                    #{{ tag }}
+                    <button type="button" class="tag-remove" [attr.aria-label]="'Retirer l’étiquette ' + tag" (click)="removeTag(tag)">×</button>
+                  </li>
+                }
+              </ul>
+            }
+            <input
+              id="clip-tag"
+              [formControl]="tagDraft"
+              [attr.maxlength]="tagMaxLength + 1"
+              autocomplete="off"
+              enterkeyhint="done"
+              [attr.aria-describedby]="tagMessage() ? 'tag-hint tag-error' : 'tag-hint'"
+              [attr.aria-invalid]="tagMessage() ? 'true' : null"
+              (keydown)="onTagKeydown($event)"
+              (input)="onTagInput()"
+            />
+            <p class="hint" id="tag-hint">Entrée ou virgule pour ajouter · {{ maxTags }} maximum, {{ tagMaxLength }} caractères, en minuscules.</p>
+            @if (tagMessage()) {
+              <p class="field-error" id="tag-error">{{ tagMessage() }}</p>
+            }
+          </div>
+
+          <fieldset class="visibility-field">
+            <legend>Visibilité</legend>
+            <label class="radio"><input type="radio" name="clip-visibility" value="private" [formControl]="visibility" /> Privé</label>
+            <label class="radio"><input type="radio" name="clip-visibility" value="public" [formControl]="visibility" /> Public</label>
+            <p class="hint">Le partage avec vos amis se règle ensuite dans la Salle de montage.</p>
+          </fieldset>
+        </div>
+
+        @if (uploadError()) {
+          <p class="alert alert-error upload-error" role="alert">{{ uploadError() }}</p>
+        }
+        @if (uploading()) {
+          <div class="progress-zone">
+            @if (uploadProgress() !== null) {
+              <progress class="progress upload-progress" max="100" [value]="uploadProgress()" aria-label="Progression de l’envoi"></progress>
+              <p class="hint">Envoi : {{ uploadProgress() }} %</p>
+            } @else {
+              <progress class="progress upload-progress" aria-label="Envoi en cours"></progress>
+            }
+          </div>
+        }
+        <p class="actions">
+          <button type="button" class="btn btn-primary send" (click)="upload()" [disabled]="!canUpload()" [attr.aria-busy]="uploading()">
+            {{ uploading() ? 'Envoi en cours…' : 'Enregistrer dans le Studio' }}
+          </button>
+        </p>
+      </div>
+    }
+
+    @if (lastCreated(); as created) {
+      <p class="alert alert-success created" role="status">
+        « {{ created.title }} » est enregistré.
+        <a class="created-link" [routerLink]="['/clips', created.id]">Ouvrir dans la Salle de montage</a>
+      </p>
     }
   </section>
 
-  <section class="card library" aria-labelledby="list-heading">
-    <div class="library-header">
-      <h2 id="list-heading" #listHeading tabindex="-1">Extraits enregistrés</h2>
-      <button type="button" class="btn-secondary refresh" (click)="load()" [disabled]="loading()">
-        Actualiser
-      </button>
-    </div>
-
-    <div class="search" role="search" aria-label="Filtrer mes extraits">
-      <label for="clip-search" class="search-label">Filtrer par titre</label>
-      <div class="search-field">
-        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path
-            d="M10 4a6 6 0 1 0 3.7 10.7l4.8 4.8 1.4-1.4-4.8-4.8A6 6 0 0 0 10 4Zm0 2a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z"
-            fill="currentColor"
-          />
-        </svg>
-        <input
-          id="clip-search"
-          #searchInput
-          type="search"
-          [formControl]="search"
-          [attr.maxlength]="searchMaxLength"
-          placeholder="Ex. : poursuite"
-          autocomplete="off"
-        />
-        @if (searchText() || query()) {
-          <button type="button" class="btn-secondary clear" (click)="clearSearch()" aria-label="Effacer le filtre">
-            Effacer
-          </button>
+  <!-- 3. Bibliothèque ------------------------------------------------------------- -->
+  <section class="library" aria-labelledby="library-heading">
+    <div class="page-header">
+      <div>
+        <p class="eyebrow">Bibliothèque</p>
+        <h2 id="library-heading" #listHeading tabindex="-1">Mes extraits</h2>
+      </div>
+      <div class="compare-bar">
+        <span class="hint compare-count">{{ selection().length }}/2 pour comparer</span>
+        @if (compareQuery(); as params) {
+          <a class="btn btn-primary compare" routerLink="/clips/compare" [queryParams]="params">Comparer</a>
+        } @else {
+          <button type="button" class="btn btn-primary compare" disabled>Comparer</button>
+        }
+        @if (selection().length) {
+          <button type="button" class="btn btn-ghost clear-selection" (click)="clearSelection()">Vider</button>
         }
       </div>
     </div>
 
-    <p class="status" role="status" aria-live="polite">
-      @if (loading()) {
-        Chargement de la page {{ page() }}…
-      } @else {
-        {{ resultsAnnouncement() }}
-      }
-    </p>
+    <div class="filters">
+      <div class="field search-field">
+        <label for="clip-search">Rechercher</label>
+        <div class="search-row">
+          <input
+            id="clip-search"
+            #searchInput
+            type="search"
+            [formControl]="search"
+            [attr.maxlength]="searchMaxLength"
+            placeholder="Titre ou nom de fichier"
+            autocomplete="off"
+          />
+          @if (searchText()) {
+            <button type="button" class="btn btn-ghost clear-search" (click)="clearSearch()">Effacer</button>
+          }
+        </div>
+      </div>
+      <div class="field">
+        <label for="clip-visibility-filter">Visibilité</label>
+        <select id="clip-visibility-filter" class="visibility-filter" [value]="visibilityFilter()" (change)="setVisibilityFilter($any($event.target).value)">
+          <option value="">Toutes</option>
+          <option value="private">{{ visibilityLabels.private }}</option>
+          <option value="shared">{{ visibilityLabels.shared }}</option>
+          <option value="public">{{ visibilityLabels.public }}</option>
+        </select>
+      </div>
+    </div>
 
-    @if (error()) {
-      <p class="alert alert-error list-error" role="alert">{{ error() }}</p>
+    @if (tagCounts().length) {
+      <ul class="tag-filters" aria-label="Filtrer par étiquette">
+        @for (item of tagCounts(); track item.tag) {
+          <li>
+            <button
+              type="button"
+              class="chip tag-filter"
+              [class.chip-accent]="tagFilter() === item.tag"
+              [attr.aria-pressed]="tagFilter() === item.tag"
+              (click)="toggleTagFilter(item.tag)"
+            >
+              #{{ item.tag }} <span class="tag-count">{{ item.count }}</span>
+            </button>
+          </li>
+        }
+      </ul>
     }
 
-    @if (loading() && clips().length === 0) {
-      <ul class="clips" aria-hidden="true">
-        @for (index of skeletons(); track index) {
-          <li class="clip-card skeleton-card">
-            <div class="skeleton skeleton-line wide"></div>
-            <div class="skeleton skeleton-line"></div>
-            <div class="skeleton skeleton-block"></div>
-          </li>
+    <p class="visually-hidden" aria-live="polite">{{ resultsAnnouncement() }}</p>
+
+    @if (error()) {
+      <div class="alert alert-error list-error" role="alert">
+        {{ error() }}
+        <button type="button" class="btn btn-secondary" (click)="load()">Réessayer</button>
+      </div>
+    } @else if (loading() && clips().length === 0) {
+      <ul class="grid" aria-hidden="true">
+        @for (i of skeletons(); track i) {
+          <li class="card skeleton-card"><div class="skeleton skeleton-poster"></div><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line short"></div></li>
         }
       </ul>
-    } @else if (clips().length > 0) {
-      <ul class="clips" [class.stale]="loading()" [attr.aria-busy]="loading()" aria-label="Liste de mes extraits">
+    } @else if (clips().length === 0) {
+      <div class="empty-state">
+        @if (filtered()) {
+          <p>Aucun extrait ne correspond à ces filtres.</p>
+          <button type="button" class="btn btn-secondary reset-filters" (click)="resetFilters()">Réinitialiser les filtres</button>
+        } @else {
+          <p>Votre bibliothèque est vide.</p>
+          <p>Déposez une vidéo ci-dessus pour analyser votre premier extrait.</p>
+        }
+      </div>
+    } @else {
+      <ul class="grid" [attr.aria-busy]="loading()">
         @for (clip of clips(); track clip.id) {
-          <li class="clip-card">
-            <div class="clip-head">
-              <h3 class="clip-title">{{ clip.title }}</h3>
-              <span class="badge">
-                <span class="visually-hidden">Durée : </span>{{ formatDuration(clip.durationSec) }}
-              </span>
-            </div>
-
-            <dl class="clip-stats">
-              <div>
-                <dt>Coupes</dt>
-                <dd>{{ clip.cutCount }}</dd>
-              </div>
-              <div>
-                <dt>Plan moyen</dt>
-                <dd>{{ formatDecimal(clip.avgShotLength, 1) }} s</dd>
-              </div>
-              <div>
-                <dt>Synchro</dt>
-                <dd>
-                  {{ clip.syncScore !== null ? formatDecimal(clip.syncScore, 2) : '—' }}
-                </dd>
-              </div>
-            </dl>
-            <p class="meta">
-              <span class="sync-chip" [class.aligned]="syncScoreLabel(clip.syncScore) === 'calé sur la musique'">
-                {{ syncScoreLabel(clip.syncScore) }}
-              </span>
-              <time [attr.datetime]="clip.createdAt">{{ clip.createdAt | date: 'dd/MM/yyyy HH:mm' }}</time>
-            </p>
-
-            <div class="clip-actions">
-              <a class="pulse-link" [routerLink]="['/clips', clip.id]" [attr.aria-label]="'Voir le pouls de ' + clip.title">
-                Voir le pouls
-              </a>
-              <button
-                type="button"
-                class="delete"
-                (click)="remove(clip)"
-                [disabled]="deletingId() === clip.id"
-                [attr.aria-busy]="deletingId() === clip.id"
-                [attr.aria-label]="'Supprimer ' + clip.title"
-              >
-                {{ deletingId() === clip.id ? 'Suppression…' : 'Supprimer' }}
-              </button>
-            </div>
+          <li>
+            <app-clip-card
+              [clip]="clip"
+              [selectable]="true"
+              [selected]="selectedIds().has(clip.id)"
+              [deletable]="deletingId() !== clip.id"
+              (open)="openClip($event)"
+              (toggleSelect)="toggleSelect($event)"
+              (remove)="remove($event)"
+            />
           </li>
         }
       </ul>
-    } @else if (!loading() && !error()) {
-      @if (query()) {
-        <div class="empty empty-search">
-          <p class="empty-title">Aucun extrait ne correspond à « {{ query() }} ».</p>
-          <p class="hint">Vérifiez l’orthographe ou essayez un mot plus court.</p>
-          <button type="button" class="btn-secondary" (click)="clearSearch()">Effacer le filtre</button>
-        </div>
-      } @else if (total() === 0) {
-        <div class="empty empty-list">
-          <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path d="M2 12h4l2-6 4 12 3-9 2 3h5v2h-6l-1-1.5-3 9-4-12-1 3.5H2v-1Z" fill="currentColor" />
-          </svg>
-          <p class="empty-title">Aucun extrait pour l’instant.</p>
-          <p class="hint">Analysez votre première vidéo avec le formulaire ci-dessus.</p>
-        </div>
-      } @else {
-        <div class="empty empty-page">
-          <p class="empty-title">Cette page ne contient plus d’extrait.</p>
-          <button type="button" class="btn-secondary" (click)="backToFirstPage()">
-            Revenir à la première page
-          </button>
-        </div>
-      }
     }
 
     @if (total() > 0) {
       <mat-paginator
-        class="paginator"
+        class="pager"
         [length]="total()"
         [pageIndex]="page() - 1"
         [pageSize]="limit()"
         [pageSizeOptions]="pageSizeOptions"
-        [showFirstLastButtons]="true"
         [disabled]="loading()"
         (page)="onPage($event)"
         aria-label="Pagination des extraits"
