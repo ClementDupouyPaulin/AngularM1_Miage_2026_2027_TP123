@@ -1,0 +1,219 @@
+.layout {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.column {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.card h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.count {
+  min-width: 1.75rem;
+  padding: 0 var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.invite-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field .hint,
+.field .field-error,
+.alert,
+.empty-line {
+  margin: 0;
+}
+
+.overview-error,
+.activity-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.overview-error p,
+.activity-error p {
+  margin: 0;
+}
+
+.people,
+.feed {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.person:last-child {
+  border-bottom: 0;
+}
+
+.person-text {
+  display: grid;
+  min-width: 0;
+}
+
+.person-text strong,
+.person-text .muted {
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.muted {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap);
+  height: var(--tap);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent-text);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+
+.avatar.small {
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 0.8125rem;
+}
+
+.skeleton-row {
+  display: block;
+  height: var(--tap);
+}
+
+.activity-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.event {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.event:last-child {
+  border-bottom: 0;
+}
+
+.event[data-type='annotation'] .avatar {
+  border-color: var(--fade);
+}
+
+.event[data-type='friend'] .avatar {
+  border-color: var(--success);
+}
+
+.event-body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.event-text {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.event-text a {
+  font-weight: 600;
+  color: var(--accent-text);
+}
+
+.annotation-text {
+  font-style: italic;
+}
+
+@media (min-width: 560px) {
+  .person {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .actions {
+    grid-column: auto;
+  }
+
+  .invite-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .invite-submit {
+    margin-top: 1.6rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .activity {
+    position: sticky;
+    top: var(--space-4);
+  }
+}

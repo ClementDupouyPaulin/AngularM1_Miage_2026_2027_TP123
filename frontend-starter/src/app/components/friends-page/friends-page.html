@@ -1,0 +1,225 @@
+<section class="page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Équipe de tournage</p>
+      <h1>Amis</h1>
+      <p>Invitez vos complices, partagez vos extraits et suivez ce qu’ils montent.</p>
+    </div>
+  </header>
+
+  <p class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{{ announcement() }}</p>
+
+  <div class="layout">
+    <div class="column">
+      <section class="card perf invite" aria-labelledby="invite-heading">
+        <h2 id="invite-heading">Inviter un ami</h2>
+        <form class="invite-form" novalidate (submit)="invite($event)">
+          <div class="field">
+            <label for="invite-email">Adresse e-mail</label>
+            <input
+              id="invite-email"
+              class="input"
+              type="email"
+              autocomplete="email"
+              inputmode="email"
+              [maxlength]="emailMaxLength"
+              [formControl]="email"
+              [attr.aria-invalid]="emailError() ? true : null"
+              [attr.aria-describedby]="emailError() ? 'invite-email-error' : 'invite-email-hint'"
+            />
+            @if (emailError()) {
+              <p id="invite-email-error" class="field-error">{{ emailError() }}</p>
+            } @else {
+              <p id="invite-email-hint" class="hint">Elle recevra votre invitation si elle a un compte.</p>
+            }
+          </div>
+          <button type="submit" class="btn btn-primary invite-submit" [disabled]="inviting()">
+            {{ inviting() ? 'Envoi…' : 'Inviter' }}
+          </button>
+        </form>
+        @if (inviteMessage()) {
+          <p class="alert alert-success invite-success" role="status">{{ inviteMessage() }}</p>
+        }
+        @if (inviteError()) {
+          <p class="alert alert-error invite-error" role="alert">{{ inviteError() }}</p>
+        }
+      </section>
+
+      @if (error()) {
+        <div class="alert alert-error overview-error" role="alert">
+          <p>{{ error() }}</p>
+          <button type="button" class="btn btn-secondary" (click)="loadOverview()">Réessayer</button>
+        </div>
+      }
+
+      <section class="card requests" aria-labelledby="incoming-heading">
+        <h2 id="incoming-heading">Invitations reçues <span class="count">{{ incoming().length }}</span></h2>
+        @if (loading()) {
+          <span class="skeleton skeleton-row" aria-hidden="true"></span>
+        } @else if (incoming().length === 0) {
+          <p class="hint empty-line">Aucune invitation en attente.</p>
+        } @else {
+          <ul class="people">
+            @for (request of incoming(); track request.id) {
+              <li class="person incoming-request">
+                <span class="avatar" aria-hidden="true">{{ initials(request.user.name) }}</span>
+                <span class="person-text">
+                  <strong>{{ request.user.name }}</strong>
+                  <span class="muted">{{ relative(request.createdAt) }}</span>
+                </span>
+                <span class="actions">
+                  <button
+                    type="button"
+                    class="btn btn-primary accept"
+                    [disabled]="busyId() !== ''"
+                    [attr.aria-label]="'Accepter l’invitation de ' + request.user.name"
+                    (click)="accept(request)"
+                  >
+                    Accepter
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-ghost decline"
+                    [disabled]="busyId() !== ''"
+                    [attr.aria-label]="'Refuser l’invitation de ' + request.user.name"
+                    (click)="decline(request)"
+                  >
+                    Refuser
+                  </button>
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="card requests" aria-labelledby="outgoing-heading">
+        <h2 id="outgoing-heading">Invitations envoyées <span class="count">{{ outgoing().length }}</span></h2>
+        @if (loading()) {
+          <span class="skeleton skeleton-row" aria-hidden="true"></span>
+        } @else if (outgoing().length === 0) {
+          <p class="hint empty-line">Aucune invitation envoyée en attente.</p>
+        } @else {
+          <ul class="people">
+            @for (request of outgoing(); track request.id) {
+              <li class="person outgoing-request">
+                <span class="avatar" aria-hidden="true">{{ initials(request.user.name) }}</span>
+                <span class="person-text">
+                  <strong>{{ request.user.name }}</strong>
+                  <span class="muted">{{ request.user.email }}</span>
+                </span>
+                <span class="actions">
+                  <button
+                    type="button"
+                    class="btn btn-ghost cancel"
+                    [disabled]="busyId() !== ''"
+                    [attr.aria-label]="'Annuler l’invitation à ' + request.user.name"
+                    (click)="cancel(request)"
+                  >
+                    Annuler
+                  </button>
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="card friends" aria-labelledby="friends-heading">
+        <h2 id="friends-heading">Mes amis <span class="count">{{ friends().length }}</span></h2>
+        @if (loading()) {
+          @for (item of skeletons; track item) {
+            <span class="skeleton skeleton-row" aria-hidden="true"></span>
+          }
+        } @else if (friends().length === 0) {
+          <div class="empty-state">
+            <p>Vous n’avez pas encore d’amis sur Film Pulse.</p>
+            <p>Invitez quelqu’un avec son adresse e-mail pour partager vos extraits.</p>
+          </div>
+        } @else {
+          <ul class="people">
+            @for (entry of friends(); track entry.friendshipId) {
+              <li class="person friend">
+                <span class="avatar" aria-hidden="true">{{ initials(entry.user.name) }}</span>
+                <span class="person-text">
+                  <strong>{{ entry.user.name }}</strong>
+                  <span class="muted">Ami depuis {{ monthYear(entry.since) }}</span>
+                </span>
+                <span class="actions">
+                  <button
+                    type="button"
+                    class="btn btn-danger remove-friend"
+                    [disabled]="busyId() !== ''"
+                    [attr.aria-label]="'Retirer ' + entry.user.name + ' de vos amis'"
+                    (click)="removeFriend(entry)"
+                  >
+                    Retirer
+                  </button>
+                </span>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+
+    <section class="card perf activity" aria-labelledby="activity-heading">
+      <div class="activity-header">
+        <h2 id="activity-heading"><span class="rec-dot" aria-hidden="true"></span> Fil d’activité</h2>
+        <button
+          type="button"
+          class="btn btn-secondary refresh-activity"
+          [disabled]="activityLoading()"
+          (click)="loadActivity()"
+        >
+          Actualiser
+        </button>
+      </div>
+
+      @if (activityLoading()) {
+        @for (item of skeletons; track item) {
+          <span class="skeleton skeleton-row" aria-hidden="true"></span>
+        }
+      } @else if (activityError()) {
+        <div class="alert alert-error activity-error" role="alert">
+          <p>{{ activityError() }}</p>
+        </div>
+      } @else if (activity().length === 0) {
+        <div class="empty-state activity-empty">
+          <p>Rien de neuf pour l’instant.</p>
+          <p>Les nouveaux extraits et annotations de vos amis apparaîtront ici.</p>
+        </div>
+      } @else {
+        <ol class="feed">
+          @for (event of activity(); track event.id) {
+            <li class="event" [attr.data-type]="event.type">
+              <span class="avatar small" aria-hidden="true">{{ initials(event.actor.name) }}</span>
+              <div class="event-body">
+                <p class="event-text">
+                  <strong>{{ event.actor.name }}</strong>
+                  @switch (event.type) {
+                    @case ('clip') {
+                      a ajouté
+                      <a [routerLink]="['/clips', event.clipId]">{{ event.clipTitle }}</a>
+                    }
+                    @case ('annotation') {
+                      a annoté
+                      <a [routerLink]="['/clips', event.clipId]">{{ event.clipTitle }}</a> :
+                      <q class="annotation-text">{{ event.text }}</q>
+                    }
+                    @default {
+                      est maintenant votre ami
+                    }
+                  }
+                </p>
+                <time class="muted event-time" [attr.datetime]="event.at" [title]="fullDate(event.at)">
+                  {{ relative(event.at) }}
+                </time>
+              </div>
+            </li>
+          }
+        </ol>
+      }
+    </section>
+  </div>
+</section>

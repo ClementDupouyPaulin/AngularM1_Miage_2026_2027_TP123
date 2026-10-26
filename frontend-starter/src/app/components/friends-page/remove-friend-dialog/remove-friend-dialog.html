@@ -1,0 +1,20 @@
+<h2 mat-dialog-title>Retirer cet ami ?</h2>
+
+<mat-dialog-content id="remove-friend-description">
+  <p>
+    <strong>{{ data.name }}</strong> ne verra plus les extraits que vous lui avez partagés, et vous
+    perdrez l’accès aux siens. Vous pourrez l’inviter à nouveau plus tard.
+  </p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" class="btn-secondary" [mat-dialog-close]="false">Annuler</button>
+  <button
+    type="button"
+    class="btn-danger confirm"
+    [mat-dialog-close]="true"
+    [attr.aria-label]="'Retirer ' + data.name + ' de vos amis'"
+  >
+    Retirer
+  </button>
+</mat-dialog-actions>

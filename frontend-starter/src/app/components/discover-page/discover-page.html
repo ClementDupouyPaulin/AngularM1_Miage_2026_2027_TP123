@@ -1,0 +1,189 @@
+<section class="page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Projection publique</p>
+      <h1>Découvrir</h1>
+      <p>Les extraits publics, ceux de vos amis et ceux qu’on vous a confiés.</p>
+    </div>
+  </header>
+
+  <p class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{{ announcement() }}</p>
+
+  <div class="tabs" role="tablist" aria-label="Sections de Découvrir">
+    @for (item of tabs; track item.id; let index = $index) {
+      <button
+        type="button"
+        role="tab"
+        [id]="'discover-tab-' + item.id"
+        [attr.aria-selected]="tab() === item.id"
+        [attr.aria-controls]="'discover-panel-' + item.id"
+        [attr.tabindex]="tab() === item.id ? 0 : -1"
+        (click)="selectTab(item.id)"
+        (keydown)="onTabKeydown($event, index)"
+      >
+        {{ item.label }}
+      </button>
+    }
+  </div>
+
+  <div
+    class="panel"
+    role="tabpanel"
+    [id]="'discover-panel-' + tab()"
+    [attr.aria-labelledby]="'discover-tab-' + tab()"
+  >
+    @if (isRankings()) {
+      <div class="rankings-toolbar">
+        <p class="hint">Top {{ rankingSize }} des extraits publics, mis à jour à chaque visite.</p>
+        <button type="button" class="btn btn-secondary refresh-rankings" (click)="loadRankings()">
+          Actualiser
+        </button>
+      </div>
+
+      <div class="boards">
+        @for (board of boards; track board.id) {
+          @let state = rankings()[board.id];
+          <section class="card perf board" [attr.aria-labelledby]="'board-' + board.id">
+            <h2 [id]="'board-' + board.id">{{ board.title }}</h2>
+            <p class="hint">{{ board.description }}</p>
+
+            @if (state.loading) {
+              <div class="board-skeleton" aria-hidden="true">
+                @for (row of skeletons; track row) {
+                  <span class="skeleton skeleton-row"></span>
+                }
+              </div>
+            } @else if (state.error) {
+              <div class="alert alert-error board-error" role="alert">
+                <p>{{ state.error }}</p>
+              </div>
+            } @else if (state.items.length === 0) {
+              <div class="empty-state board-empty">
+                <p>Pas encore assez d’extraits publics pour ce classement.</p>
+              </div>
+            } @else {
+              <div class="table-scroll">
+                <table class="ranking" [attr.data-board]="board.id">
+                  <caption class="visually-hidden">{{ board.title }}, top {{ state.items.length }}</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Rang</th>
+                      <th scope="col">Titre</th>
+                      <th scope="col">Propriétaire</th>
+                      <th scope="col" class="metric-col">{{ board.metricLabel }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (clip of state.items; track clip.id; let index = $index) {
+                      <tr [class.podium]="index < podiumSize" [attr.data-rank]="index + 1" (click)="open(clip)">
+                        <td class="rank">
+                          @if (index < podiumSize) {
+                            <span class="medal" [class]="'medal-' + (index + 1)" aria-hidden="true"></span>
+                          }
+                          <span class="rank-label">{{ rankLabel(index) }}</span>
+                        </td>
+                        <th scope="row" class="title-cell">
+                          <button type="button" class="row-open">{{ clip.title }}</button>
+                        </th>
+                        <td class="owner">{{ clip.owner.name }}</td>
+                        <td class="metric timecode">{{ metric(board.id, clip) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </section>
+        }
+      </div>
+    } @else {
+      <div class="filters card">
+        <div class="field search-field">
+          <label for="discover-search">Rechercher</label>
+          <input
+            id="discover-search"
+            class="input"
+            type="search"
+            placeholder="Titre ou étiquette"
+            autocomplete="off"
+            [maxlength]="searchMaxLength"
+            [formControl]="search"
+          />
+        </div>
+
+        <div class="field sort-field">
+          <label for="discover-sort">Trier par</label>
+          <select #sortSelect id="discover-sort" class="select" (change)="setSort(sortSelect.value)">
+            @for (option of sortOptions; track option.value) {
+              <option [value]="option.value" [selected]="option.value === sort()">{{ option.label }}</option>
+            }
+          </select>
+        </div>
+
+        @if (availableTags().length > 0) {
+          <div class="tag-filter" role="group" aria-label="Filtrer par étiquette">
+            @for (item of availableTags(); track item) {
+              <button
+                type="button"
+                class="chip tag-chip"
+                [class.chip-accent]="tag() === item"
+                [attr.aria-pressed]="tag() === item"
+                (click)="toggleTag(item)"
+              >
+                #{{ item }}
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      @if (loading()) {
+        <div class="grid" aria-hidden="true">
+          @for (item of skeletons; track item) {
+            <div class="card skeleton-card">
+              <span class="skeleton skeleton-poster"></span>
+              <span class="skeleton skeleton-line"></span>
+              <span class="skeleton skeleton-line short"></span>
+            </div>
+          }
+        </div>
+      } @else if (error()) {
+        <div class="alert alert-error load-error" role="alert">
+          <p>{{ error() }}</p>
+          <button type="button" class="btn btn-secondary" (click)="load()">Réessayer</button>
+        </div>
+      } @else if (items().length === 0) {
+        <div class="empty-state">
+          <p>{{ emptyMessage() }}</p>
+          @if (hasFilters()) {
+            <button type="button" class="btn btn-ghost clear-filters" (click)="clearFilters()">
+              Effacer les filtres
+            </button>
+          }
+        </div>
+      } @else {
+        <ul class="grid" [attr.aria-label]="activeTabLabel() + ' : extraits'">
+          @for (clip of items(); track clip.id) {
+            <li>
+              <app-clip-card [clip]="clip" [showOwner]="true" (open)="open($event)" />
+            </li>
+          }
+        </ul>
+      }
+
+      @if (total() > 0) {
+        <mat-paginator
+          class="paginator"
+          [length]="total()"
+          [pageIndex]="page() - 1"
+          [pageSize]="limit()"
+          [pageSizeOptions]="pageSizeOptions"
+          [showFirstLastButtons]="true"
+          [disabled]="loading()"
+          (page)="onPage($event)"
+          aria-label="Pagination des extraits"
+        />
+      }
+    }
+  </div>
+</section>

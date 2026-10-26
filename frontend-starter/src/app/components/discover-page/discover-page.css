@@ -1,0 +1,266 @@
+.panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.panel:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.filters {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.tag-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tag-chip {
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.tag-chip:hover {
+  background: var(--surface-3);
+}
+
+.tag-chip[aria-pressed='true'] {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.skeleton-poster {
+  display: block;
+  aspect-ratio: 16 / 9;
+}
+
+.skeleton-line {
+  display: block;
+  height: 0.9rem;
+}
+
+.skeleton-line.short {
+  width: 60%;
+}
+
+.load-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.load-error p,
+.board-error p {
+  margin: 0;
+}
+
+.paginator {
+  background: transparent;
+}
+
+.rankings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.rankings-toolbar .hint {
+  margin: 0;
+}
+
+.boards {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.board {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-width: 0;
+}
+
+.board h2,
+.board > .hint {
+  margin: 0;
+}
+
+.board-skeleton {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.skeleton-row {
+  display: block;
+  height: 2.25rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.ranking {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ranking th,
+.ranking td {
+  padding: var(--space-2);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--border);
+}
+
+.ranking thead th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.ranking tbody tr {
+  cursor: pointer;
+}
+
+.ranking tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.ranking .metric-col,
+.ranking .metric {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.rank {
+  white-space: nowrap;
+}
+
+.rank-label {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.owner {
+  color: var(--text-muted);
+}
+
+.row-open {
+  min-height: var(--tap);
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.row-open:hover {
+  color: var(--accent-text);
+  text-decoration: underline;
+}
+
+.podium .rank-label {
+  font-weight: 700;
+}
+
+.podium[data-rank='1'] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.medal {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.medal-1 {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+}
+
+.medal-2 {
+  background: var(--surface-3);
+  border-color: var(--text-muted);
+}
+
+.medal-3 {
+  background: color-mix(in srgb, var(--accent) 55%, var(--rec));
+  border-color: color-mix(in srgb, var(--accent-strong) 50%, var(--rec));
+}
+
+@media (min-width: 720px) {
+  .filters {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    align-items: end;
+  }
+
+  .tag-filter {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .boards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .tag-chip,
+  .ranking tbody tr {
+    transition: background-color 0.15s ease;
+  }
+}
