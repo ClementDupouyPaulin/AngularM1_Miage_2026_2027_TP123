@@ -4,6 +4,8 @@ import {
   DecodedAudio,
   FrameSource,
   MAX_CLIP_DURATION_SEC,
+  MAX_FILMSTRIP_BYTES,
+  MAX_THUMBNAILS,
   SAMPLE_FPS,
   SEEK_TIMEOUT_MS,
   mixToMono,
@@ -33,11 +35,48 @@ function burstSignal(durationSec: number, onsets: number[]): Float32Array {
   return samples;
 }
 
+/** Canvas minimal : `drawImage` ignoré, `toBlob` délégué à `encode`. */
+function fakeCanvas(width: number, height: number): HTMLCanvasElement {
+  return { width, height, getContext: () => ({ drawImage: () => undefined }) } as unknown as HTMLCanvasElement;
+}
+
+/** Worker simulé : répond `response` (ou déclenche une erreur) au premier message. */
+class FakeWorker {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onmessageerror: ((event: MessageEvent) => void) | null = null;
+  transfer: Transferable[] = [];
+  terminated = false;
+
+  constructor(private readonly response: { beats: number[] } | 'error' | 'hang') {}
+
+  postMessage(_message: unknown, transfer: Transferable[]): void {
+    this.transfer = transfer;
+    queueMicrotask(() => {
+      if (this.response === 'hang') return;
+      if (this.response === 'error') this.onerror?.(new Event('error'));
+      else this.onmessage?.({ data: this.response } as MessageEvent);
+    });
+  }
+
+  terminate(): void {
+    this.terminated = true;
+  }
+}
+
 /** Analyseur dont les accès DOM sont remplacés par des données fabriquées. */
 class FakeAnalyzer extends ClipAnalyzerService {
   durationSec = 3;
   /** Instant (s) où l'image passe du noir au blanc. */
   cutAtSec = 1.2;
+  /** Niveau de gris de l'image à un instant (par défaut : noir puis blanc à `cutAtSec`). */
+  levelAt: (timeSec: number) => number = (timeSec) => (timeSec < this.cutAtSec - 1e-9 ? 0 : 255);
+  drawnTimes: number[] = [];
+  drawError: Error | null = null;
+  /** Taille (octets) du JPEG produit pour un canvas et une qualité. */
+  jpegSize: (canvas: HTMLCanvasElement, quality: number) => number = () => 20000;
+  jpegQualities: number[] = [];
+  worker: FakeWorker | null = null;
   audio: DecodedAudio | Error = { channels: [new Float32Array(SAMPLE_RATE)], sampleRate: SAMPLE_RATE };
   openError: unknown = null;
   seekedTimes: number[] = [];
@@ -58,7 +97,11 @@ class FakeAnalyzer extends ClipAnalyzerService {
         this.beforeFrame(timeSec);
         this.seekedTimes.push(timeSec);
         if (this.frameHangs) return new Promise<Uint8ClampedArray>(() => undefined);
-        return solidFrame(timeSec < this.cutAtSec - 1e-9 ? 0 : 255);
+        return solidFrame(this.levelAt(timeSec));
+      },
+      drawFrame: async (timeSec) => {
+        if (this.drawError) throw this.drawError;
+        this.drawnTimes.push(timeSec);
       },
       close: () => {
         this.closed = true;
@@ -69,6 +112,19 @@ class FakeAnalyzer extends ClipAnalyzerService {
   protected override async decodeAudio(): Promise<DecodedAudio> {
     if (this.audio instanceof Error) throw this.audio;
     return this.audio;
+  }
+
+  protected override createCanvas(width: number, height: number): HTMLCanvasElement {
+    return fakeCanvas(width, height);
+  }
+
+  protected override async encodeJpeg(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
+    this.jpegQualities.push(quality);
+    return new Blob([new Uint8Array(this.jpegSize(canvas, quality))], { type: 'image/jpeg' });
+  }
+
+  protected override createBeatWorker(): Worker | null {
+    return this.worker ? (this.worker as unknown as Worker) : super.createBeatWorker();
   }
 }
 
@@ -135,11 +191,11 @@ describe('ClipAnalyzerService', () => {
   });
 
   it('échantillonne à SAMPLE_FPS et détecte la coupe', async () => {
-    const result = await analyzer.analyze(file);
+    const { analysis: result } = await analyzer.analyze(file);
 
     expect(analyzer.seekedTimes.length).toBe(analyzer.durationSec * SAMPLE_FPS);
     expect(analyzer.seekedTimes[1]).toBeCloseTo(1 / SAMPLE_FPS, 9);
-    expect(result.version).toBe(1);
+    expect(result.version).toBe(2);
     expect(result.durationSec).toBe(3);
     expect(result.cuts).toEqual([1.2]);
     expect(analyzer.closed).toBe(true);
@@ -151,11 +207,11 @@ describe('ClipAnalyzerService', () => {
     analyzer.durationSec = 3.14159;
     analyzer.audio = { channels: [burstSignal(3, [0.5, 1.2, 2]), burstSignal(3, [0.5, 1.2, 2])], sampleRate: SAMPLE_RATE };
 
-    const result = await analyzer.analyze(file);
+    const { analysis: result } = await analyzer.analyze(file);
 
     expect(result.durationSec).toBe(3.142);
     expect(result.beats.length).toBe(3);
-    for (const time of [...result.beats, ...result.cuts]) {
+    for (const time of [...result.beats, ...result.cuts, ...result.diffs, ...result.thumbnailTimes]) {
       expect(Math.round(time * 1000) / 1000).toBe(time);
     }
     expect(result.syncScore).toBeGreaterThan(1);
@@ -167,7 +223,8 @@ describe('ClipAnalyzerService', () => {
 
     expect(ratios[0]).toBe(0);
     expect(ratios.at(-1)).toBe(1);
-    expect(ratios).toContain(0.85);
+    expect(ratios).toContain(0.8);
+    expect(ratios).toContain(0.9);
     ratios.slice(1).forEach((ratio, i) => expect(ratio).toBeGreaterThanOrEqual(ratios[i]));
   });
 
@@ -218,10 +275,10 @@ describe('ClipAnalyzerService', () => {
   it('ignore les beats situés après la fin de la vidéo', async () => {
     analyzer.durationSec = 3;
     analyzer.audio = { channels: [burstSignal(3, [0.5, 1.2, 2.6])], sampleRate: SAMPLE_RATE };
-    expect((await analyzer.analyze(file)).beats.length).toBe(3);
+    expect((await analyzer.analyze(file)).analysis.beats.length).toBe(3);
 
     analyzer.durationSec = 2.3;
-    const result = await analyzer.analyze(file);
+    const { analysis: result } = await analyzer.analyze(file);
 
     expect(result.beats.length).toBe(2);
     expect(result.beats.every((beat) => beat >= 0 && beat <= result.durationSec)).toBe(true);
@@ -279,10 +336,120 @@ describe('ClipAnalyzerService', () => {
   it('se replie sur les coupes seules si l’audio ne se décode pas', async () => {
     analyzer.audio = new Error('EncodingError');
 
-    const result = await analyzer.analyze(file);
+    const { analysis: result } = await analyzer.analyze(file);
 
     expect(result.cuts).toEqual([1.2]);
     expect(result.beats).toEqual([]);
     expect(result.syncScore).toBeNull();
+  });
+
+  it('produit une analyse v2 complète et sa pellicule', async () => {
+    const { analysis, filmstrip } = await analyzer.analyze(file);
+
+    expect(analysis.fps).toBe(SAMPLE_FPS);
+    expect(analysis.diffs.length).toBe(29);
+    expect(analysis.diffs[11]).toBe(1);
+    expect(analysis.palette).toEqual(['#000000', '#ffffff', '#ffffff']);
+    expect(analysis.transitions).toEqual([{ time: 1.2, kind: 'cut' }]);
+    expect(analysis.sensitivity).toBe(3);
+    expect(analysis.thumbnailTimes).toEqual([0, 1.3]);
+    expect(analyzer.drawnTimes).toEqual([0, 1.3]);
+    expect(filmstrip?.type).toBe('image/jpeg');
+    expect(analyzer.jpegQualities).toEqual([0.8]);
+  });
+
+  it('signale chaque image échantillonnée pour l’aperçu en direct', async () => {
+    const samples: { time: number; diff: number; color: string }[] = [];
+    await analyzer.analyze(file, { onSample: (sample) => samples.push(sample) });
+
+    expect(samples.length).toBe(30);
+    expect(samples[0]).toEqual({ time: 0, diff: 0, color: '#000000' });
+    expect(samples[12]).toEqual({ time: 1.2, diff: 1, color: '#ffffff' });
+  });
+
+  it('réduit la qualité JPEG puis le nombre de cellules pour rester sous 1 Mo', async () => {
+    analyzer.durationSec = 100;
+    analyzer.levelAt = (timeSec) => (Math.floor(timeSec / 2) % 2 === 0 ? 0 : 255);
+    analyzer.jpegSize = (canvas) => (canvas.width / 160) * 40000;
+
+    const { analysis, filmstrip } = await analyzer.analyze(file);
+
+    expect(analysis.cuts.length).toBe(49);
+    expect(analyzer.drawnTimes.length).toBe(MAX_THUMBNAILS);
+    expect(analyzer.jpegQualities).toEqual([0.8, 0.6, 0.4, 0.8]);
+    expect(analysis.thumbnailTimes.length).toBe(21);
+    expect(analysis.thumbnailTimes[0]).toBe(0);
+    analysis.thumbnailTimes.slice(1).forEach((time, i) => expect(time).toBeGreaterThan(analysis.thumbnailTimes[i]));
+    expect(filmstrip!.size).toBeLessThanOrEqual(MAX_FILMSTRIP_BYTES);
+  });
+
+  it('garde l’analyse sans pellicule si la capture échoue', async () => {
+    analyzer.drawError = new Error('SecurityError');
+
+    const { analysis, filmstrip } = await analyzer.analyze(file);
+
+    expect(filmstrip).toBeNull();
+    expect(analysis.thumbnailTimes).toEqual([]);
+    expect(analysis.cuts).toEqual([1.2]);
+  });
+
+  it('recalcule l’analyse avec une autre sensibilité', async () => {
+    const { analysis } = await analyzer.analyze(file);
+
+    const strict = analyzer.rebuild(analysis, 9);
+    const loose = analyzer.rebuild(analysis, 0);
+
+    expect(strict.sensitivity).toBe(6);
+    expect(strict.cuts).toEqual([]);
+    expect(strict.transitions).toEqual([]);
+    expect(loose.sensitivity).toBe(1);
+    expect(loose.cuts).toEqual([1.2]);
+    expect(loose.diffs).toBe(analysis.diffs);
+  });
+
+  describe('détection des beats dans un worker', () => {
+    beforeEach(() => {
+      analyzer.audio = { channels: [burstSignal(3, [0.5, 1.2, 2])], sampleRate: SAMPLE_RATE };
+    });
+
+    it('utilise les beats du worker et lui transfère les échantillons', async () => {
+      analyzer.worker = new FakeWorker({ beats: [0.25, 1.7505] });
+
+      const { analysis } = await analyzer.analyze(file);
+
+      expect(analysis.beats).toEqual([0.25, 1.751]);
+      expect(analyzer.worker.transfer.length).toBe(1);
+      expect(analyzer.worker.terminated).toBe(true);
+    });
+
+    it('se replie sur le thread principal si le worker échoue', async () => {
+      analyzer.worker = new FakeWorker('error');
+
+      const { analysis } = await analyzer.analyze(file);
+
+      expect(analysis.beats.length).toBe(3);
+      expect(analyzer.worker.terminated).toBe(true);
+    });
+
+    it('se replie sur le thread principal sans Worker disponible', async () => {
+      vi.stubGlobal('Worker', undefined);
+      try {
+        expect((await analyzer.analyze(file)).analysis.beats.length).toBe(3);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('propage l’annulation pendant la détection dans le worker', async () => {
+      const controller = new AbortController();
+      analyzer.worker = new FakeWorker('hang');
+
+      const pending = analyzer.analyze(file, { signal: controller.signal });
+      await vi.waitFor(() => expect(analyzer.worker!.transfer.length).toBe(1));
+      controller.abort();
+
+      await expect(pending).rejects.toMatchObject({ code: 'aborted' });
+      expect(analyzer.worker.terminated).toBe(true);
+    });
   });
 });

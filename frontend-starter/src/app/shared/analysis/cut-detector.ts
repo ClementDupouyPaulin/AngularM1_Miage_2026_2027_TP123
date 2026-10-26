@@ -16,9 +16,12 @@ export interface CutDetectionOptions {
   minDiff?: number;
 }
 
-const DEFAULT_K = 3;
+/** Coefficient k par défaut, et bornes du curseur de sensibilité. */
+export const DEFAULT_K = 3;
+export const MIN_K = 1;
+export const MAX_K = 6;
 const DEFAULT_MIN_GAP_SEC = 0.3;
-const DEFAULT_MIN_DIFF = 0.2;
+export const DEFAULT_MIN_DIFF = 0.2;
 
 /** Histogramme RGB (16 classes par canal), normalisé par le nombre de pixels. */
 function colorHistogram(data: Uint8ClampedArray): Float64Array {
@@ -49,6 +52,20 @@ export function histogramDifference(a: Uint8ClampedArray, b: Uint8ClampedArray):
   return Math.min(1, distance / (MAX_L1_PER_CHANNEL * COLOR_CHANNELS));
 }
 
+/** Seuil de coupe : moyenne + k·écart-type des différences, jamais sous `minDiff`. */
+export function cutThreshold(diffs: number[], k = DEFAULT_K, minDiff = DEFAULT_MIN_DIFF): number {
+  const { mean, deviation } = diffStatistics(diffs);
+  return Math.max(mean + k * deviation, minDiff);
+}
+
+/** Moyenne et écart-type des différences (0 pour un tableau vide). */
+export function diffStatistics(diffs: number[]): { mean: number; deviation: number } {
+  if (diffs.length === 0) return { mean: 0, deviation: 0 };
+  const mean = diffs.reduce((sum, d) => sum + d, 0) / diffs.length;
+  const variance = diffs.reduce((sum, d) => sum + (d - mean) ** 2, 0) / diffs.length;
+  return { mean, deviation: Math.sqrt(variance) };
+}
+
 /**
  * Temps des coupes (s) à partir des différences entre images successives
  * (`diffs[i]` = différence entre l'image i et i+1). Seuil adaptatif
@@ -56,13 +73,8 @@ export function histogramDifference(a: Uint8ClampedArray, b: Uint8ClampedArray):
  */
 export function detectCuts(diffs: number[], fps: number, options: CutDetectionOptions = {}): number[] {
   if (diffs.length === 0 || !(fps > 0)) return [];
-  const k = options.k ?? DEFAULT_K;
   const minGapSec = options.minGapSec ?? DEFAULT_MIN_GAP_SEC;
-  const minDiff = options.minDiff ?? DEFAULT_MIN_DIFF;
-
-  const mean = diffs.reduce((sum, d) => sum + d, 0) / diffs.length;
-  const variance = diffs.reduce((sum, d) => sum + (d - mean) ** 2, 0) / diffs.length;
-  const threshold = Math.max(mean + k * Math.sqrt(variance), minDiff);
+  const threshold = cutThreshold(diffs, options.k, options.minDiff);
 
   const candidates = diffs
     .map((diff, i) => ({ diff, time: (i + 1) / fps }))
