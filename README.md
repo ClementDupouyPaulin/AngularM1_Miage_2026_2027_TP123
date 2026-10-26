@@ -74,6 +74,9 @@ progression, tests, restitution orale, bonus). Le statut de chaque
 fonctionnalité facultative est dans
 [frontend-starter/docs/bonus/matrice-facultatives.md](frontend-starter/docs/bonus/matrice-facultatives.md).
 
+Mini-projet TP4 « Film Pulse » : rapport dans [REPORT.md](REPORT.md), plan et
+décisions de cadrage dans [PLAN.md](PLAN.md).
+
 ## Documents de travail
 
 - [SUJET_ETUDIANT_TP1.md](SUJET_ETUDIANT_TP1.md), [SUJET_ETUDIANT_TP2.md](SUJET_ETUDIANT_TP2.md) et [SUJET_ETUDIANT_TP3.md](SUJET_ETUDIANT_TP3.md) : missions des trois séances ;
