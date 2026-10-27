@@ -15,7 +15,7 @@ export interface ClipAnalysis {
   cuts: number[];
   beats: number[];
   syncScore: number | null;
-  /** `diffs[i]` : différence d'histogramme entre l'image i et i+1 (0-1, 3 décimales). */
+  /** `diffs[i]` : différence de luminance (blocs 16×12) entre l'image i et i+1 (0-1, 3 décimales). */
   diffs: number[];
   /** Couleur dominante `#rrggbb` de chaque seconde. */
   palette: string[];

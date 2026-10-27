@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ClipAnalysis } from '../models/clip.model';
 import { detectBeats } from '../analysis/beat-detector';
-import { DEFAULT_K, detectCuts, histogramDifference } from '../analysis/cut-detector';
+import { DEFAULT_K, detectCuts, frameDifference } from '../analysis/cut-detector';
 import { dominantColor, paletteFromColors } from '../analysis/palette';
 import { rebuildAnalysis } from '../analysis/redetect';
 import { syncScore } from '../analysis/sync-score';
@@ -193,8 +193,8 @@ function once(target: EventTarget, events: string[], timeoutMs: number, signal?:
 }
 
 /**
- * Analyse un extrait vidéo dans le navigateur : coupes et fondus (histogrammes
- * d'images échantillonnées), palette, pellicule, beats de la bande-son et
+ * Analyse un extrait vidéo dans le navigateur : coupes et fondus (différences
+ * entre images échantillonnées), palette, pellicule, beats de la bande-son et
  * score de synchronisation.
  */
 @Injectable({ providedIn: 'root' })
@@ -264,7 +264,7 @@ export class ClipAnalyzerService {
     }
   }
 
-  /** Différences d'histogramme (3 décimales) et couleur dominante de chaque image, échantillonnées à SAMPLE_FPS. */
+  /** Différences entre images successives (3 décimales, voir `frameDifference`) et couleur dominante de chaque image, échantillonnées à SAMPLE_FPS. */
   private async sampleFrames(
     source: FrameSource,
     { signal, onProgress, onSample }: ClipAnalyzeOptions,
@@ -277,7 +277,7 @@ export class ClipAnalyzerService {
       throwIfAborted(signal);
       const time = i / SAMPLE_FPS;
       const frame = await withDeadline(source.frameAt(time), SEEK_TIMEOUT_MS, signal);
-      const diff = previous ? roundTime(histogramDifference(previous, frame)) : 0;
+      const diff = previous ? roundTime(frameDifference(previous, frame, FRAME_WIDTH)) : 0;
       if (previous) diffs.push(diff);
       const color = dominantColor(frame);
       colors.push(color);

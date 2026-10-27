@@ -57,7 +57,7 @@ function makePage(items: ClipSummary[], overrides: Partial<Page<ClipSummary>> = 
 function makeAnalysis(): ClipAnalysis {
   const diffs = Array.from({ length: 99 }, () => 0.02);
   for (const i of [19, 49, 79]) diffs[i] = 0.9;
-  diffs[64] = 0.3;
+  diffs[64] = 0.07;
   return {
     version: 2,
     durationSec: 10,

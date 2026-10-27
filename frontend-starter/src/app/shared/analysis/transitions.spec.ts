@@ -19,12 +19,12 @@ describe('detectTransitions', () => {
   it('détecte un fondu au centre d’une fenêtre de différences modérées', () => {
     const diffs = lowNoise(100);
     diffs[70] = 0.9;
-    for (let i = 30; i < 35; i++) diffs[i] = 0.15;
+    for (let i = 30; i < 36; i++) diffs[i] = 0.07;
     const cuts = detectCuts(diffs, FPS);
 
     expect(cuts).toEqual([7.1]);
     expect(detectTransitions(diffs, FPS, cuts)).toEqual([
-      { time: 3.25, kind: 'fade' },
+      { time: 3.3, kind: 'fade' },
       { time: 7.1, kind: 'cut' },
     ]);
   });
@@ -33,7 +33,7 @@ describe('detectTransitions', () => {
     const diffs = lowNoise(120);
     diffs[20] = 0.95;
     diffs[90] = 0.9;
-    [0.06, 0.09, 0.12, 0.12, 0.09, 0.06].forEach((d, i) => (diffs[50 + i] = d));
+    [0.05, 0.07, 0.085, 0.085, 0.07, 0.05].forEach((d, i) => (diffs[50 + i] = d));
     const cuts = detectCuts(diffs, FPS);
 
     expect(cuts).toEqual([2.1, 9.1]);

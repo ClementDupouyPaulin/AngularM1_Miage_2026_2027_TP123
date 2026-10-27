@@ -1,5 +1,5 @@
 import { ClipTransition } from '../models/clip.model';
-import { cutThreshold, diffStatistics } from './cut-detector';
+import { cutThresholds, diffStatistics } from './cut-detector';
 
 export interface TransitionDetectionOptions {
   /** Coefficient k du seuil de coupe (voir `detectCuts`). */
@@ -21,11 +21,11 @@ function roundTime(value: number): number {
 }
 
 /** Fenêtres [début, fin] (indices de `diffs`) de différences modérées consécutives. */
-function moderateRuns(diffs: number[], low: number, high: number): [number, number][] {
+function moderateRuns(diffs: number[], low: number, high: number[]): [number, number][] {
   const runs: [number, number][] = [];
   let start = -1;
   diffs.forEach((diff, i) => {
-    const moderate = diff > low && diff <= high;
+    const moderate = diff > low && diff < high[i];
     if (moderate && start < 0) start = i;
     if (!moderate && start >= 0) {
       runs.push([start, i - 1]);
@@ -39,7 +39,7 @@ function moderateRuns(diffs: number[], low: number, high: number): [number, numb
 /**
  * Transitions triées par temps : chaque coupe (`cut`), plus les fondus (`fade`),
  * fenêtres d'au moins `minFrames` différences consécutives au-dessus de
- * moyenne + 1σ (calculées hors coupes) mais sous le seuil de coupe, de somme ≥ `minSum`, sans coupe
+ * moyenne + 1σ (calculées hors coupes) mais sous le seuil local de coupe, de somme ≥ `minSum`, sans coupe
  * à l'intérieur. Un fondu est daté au centre de sa fenêtre.
  */
 export function detectTransitions(
@@ -52,9 +52,9 @@ export function detectTransitions(
   if (diffs.length > 0 && fps > 0) {
     const minFrames = options.minFrames ?? DEFAULT_MIN_FRAMES;
     const minSum = options.minSum ?? DEFAULT_MIN_SUM;
-    const high = cutThreshold(diffs, options.k, options.minDiff);
+    const high = cutThresholds(diffs, fps, options.k, options.minDiff);
     // Les coupes fortes gonfleraient σ et masqueraient tout fondu : stats calculées sans elles.
-    const { mean, deviation } = diffStatistics(diffs.filter((diff) => diff <= high));
+    const { mean, deviation } = diffStatistics(diffs.filter((diff, i) => diff < high[i]));
     const cutFrames = cuts.map((time) => Math.round(time * fps) - 1);
 
     for (const [start, end] of moderateRuns(diffs, mean + deviation, high)) {

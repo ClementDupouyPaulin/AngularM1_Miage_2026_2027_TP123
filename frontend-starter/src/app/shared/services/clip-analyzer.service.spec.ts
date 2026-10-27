@@ -11,6 +11,7 @@ import {
   SEEK_TIMEOUT_MS,
   mixToMono,
 } from './clip-analyzer.service';
+import { DEFAULT_K } from '../analysis/cut-detector';
 
 const PIXELS = 16;
 const SAMPLE_RATE = 8000;
@@ -385,7 +386,7 @@ describe('ClipAnalyzerService', () => {
     expect(analysis.diffs[11]).toBe(1);
     expect(analysis.palette).toEqual(['#000000', '#ffffff', '#ffffff']);
     expect(analysis.transitions).toEqual([{ time: 1.2, kind: 'cut' }]);
-    expect(analysis.sensitivity).toBe(3);
+    expect(analysis.sensitivity).toBe(DEFAULT_K);
     expect(analysis.thumbnailTimes).toEqual([0, 1.3]);
     expect(analyzer.drawnTimes).toEqual([0, 1.3]);
     expect(filmstrip?.type).toBe('image/jpeg');
@@ -428,6 +429,7 @@ describe('ClipAnalyzerService', () => {
   });
 
   it('recalcule l’analyse avec une autre sensibilité', async () => {
+    analyzer.levelAt = (timeSec) => (timeSec < analyzer.cutAtSec - 1e-9 ? 100 : 112);
     const { analysis } = await analyzer.analyze(file);
 
     const strict = analyzer.rebuild(analysis, 9);
