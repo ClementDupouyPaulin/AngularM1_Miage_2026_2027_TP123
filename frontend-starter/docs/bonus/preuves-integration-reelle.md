@@ -25,7 +25,7 @@ ligne de commande.
 ## Conditions d'exécution
 
 - **Port 3100.** Le serveur de test tournait sur le port **3100**, car le port
-  3000 était occupé par le serveur du binôme. Conséquence : le proxy du frontend
+  3000 était occupé par le serveur déjà lancé par l'étudiant. Conséquence : le proxy du frontend
   (`proxy.conf.json`, cible `http://localhost:3000`) n'était **pas** impliqué.
   Aucune de ces vérifications ne passe par Angular.
 - **Base réelle.** MongoDB Atlas, pas une simulation.

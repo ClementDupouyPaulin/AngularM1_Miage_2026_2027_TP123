@@ -89,7 +89,7 @@ en respectant l'architecture composant → `AuthService` → `HttpClient`.
 4. Implémentation des correctifs un par un, avec relance de la suite
    complète après chaque étape pour vérifier l'absence de régression.
 
-**Vérifications réalisées par l'agent (à recontrôler par le binôme)** :
+**Vérifications réalisées par l'agent (à recontrôler par l'étudiant)** :
 - `npm test` relancé après chaque correctif (5 étapes), résultat final :
   **13 tests verts sur 13**.
 - `npx tsc --noEmit` sur `tsconfig.app.json` et `tsconfig.spec.json` pour
@@ -679,7 +679,7 @@ part de chaque élément n'a pas été mesurée.
 
 Ces preuves en ligne de commande valident le **contrat HTTP**. Elles ne sont **pas**
 des captures Network du navigateur et ne les remplacent pas. Le serveur de test
-tournait sur le port 3100 (le 3000 étant occupé par le serveur du binôme) : le proxy
+tournait sur le port 3100 (le 3000 étant occupé par le serveur déjà lancé par l'étudiant) : le proxy
 du frontend n'était donc pas impliqué. Deux utilisateurs temporaires restent dans la
 base (aucune route de suppression de compte).
 
