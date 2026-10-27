@@ -498,8 +498,6 @@ production.
 - [ ] `cd frontend-starter && npm run build` passe
 - [ ] Lancer l'appli et dérouler la démo de `REPORT.md` (7 étapes)
 - [ ] **Faire tes captures Network** (procédure dans `docs/captures/`)
-- [ ] Compléter les `[À COMPLÉTER PAR LE BINÔME]` de `RAPPORT_IA_MODELE.md` et de
-      `frontend-starter/docs/README.md`
 - [ ] Relire `REPORT.md` et ce guide, en pouvant expliquer chaque section
 - [ ] Décider du `git push` (la branche est `feat/film-pulse-studio`) :
       `git push -u fork feat/film-pulse-studio`

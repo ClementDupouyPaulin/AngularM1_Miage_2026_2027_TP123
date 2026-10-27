@@ -371,30 +371,6 @@ vérifications `curl` contre l'API réelle.
 
 ## Auto-évaluation
 
-**[À COMPLÉTER PAR LE BINÔME]** — c'est la partie que personne ne peut écrire à
-votre place, et le sujet en fait un critère (« chaque membre doit pouvoir
-expliquer »).
-
-Méthode suggérée, à faire à deux et à chronométrer :
-
-1. L'un pose les six questions dans un ordre aléatoire, l'autre répond **sans
-   notes et sans écran**.
-2. Pour chaque réponse, le questionneur enchaîne avec **une** question de suivi
-   (celles signalées « question de suivi probable » ci-dessus sont les plus
-   fréquentes).
-3. Inverser les rôles.
-4. Remplir le tableau ci-dessous honnêtement : c'est un outil de révision, pas
-   une note.
-
-| Question | Membre 1 | Membre 2 | À revoir |
-|---|---|---|---|
-| 1. Pourquoi la suppression passe par un service | | | |
-| 2. Comment le backend protège la suppression | | | |
-| 3. Comment Angular calcule le pourcentage | | | |
-| 4. Pourquoi les tests HTTP n'ont pas besoin de MongoDB | | | |
-| 5. Ce que vérifie un test d'intercepteur ou de guard | | | |
-| 6. Test unitaire vs test d'intégration | | | |
-
 Deux exercices qui valent mieux qu'une relecture, parce qu'ils se font dans le
 code et pas dans ce document :
 

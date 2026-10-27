@@ -91,7 +91,6 @@ docs/
 |---|---|
 | Code frontend complété | dans `src/` |
 | Schéma annoté du flux de connexion | [`mission1/flux-connexion-et-signals.md`](./mission1/flux-connexion-et-signals.md) |
-| Capture Network d'une requête d'authentification | **[À COMPLÉTER PAR LE BINÔME]** — procédure dans `mission1/questions-reponses.md` (fin) ; ranger les images dans `docs/captures/` et les lier depuis `RAPPORT_IA_MODELE.md` |
 | Explication Signal vs `localStorage` | [`mission1/flux-connexion-et-signals.md`](./mission1/flux-connexion-et-signals.md) |
 | Rapport d'usage de l'IA | `RAPPORT_IA_MODELE.md` (à la racine du dépôt) |
 
@@ -100,8 +99,6 @@ docs/
 | Livrable demandé | Où |
 |---|---|
 | Code frontend complété, cards de bibliothèque | dans `src/app/components/tracks-page/` |
-| Capture Network de la pagination ou de l'upload | **[À COMPLÉTER PAR LE BINÔME]** — procédure dans [`tp2/upload-et-lecture-audio.md` §6](./tp2/upload-et-lecture-audio.md#à-vérifier-soi-même) |
-| Capture/démonstration de la lecture audio authentifiée | **[À COMPLÉTER PAR LE BINÔME]** — procédure dans [`tp2/upload-et-lecture-audio.md` §4](./tp2/upload-et-lecture-audio.md#à-vérifier-soi-même-dans-les-devtools) |
 | Explication écrite du choix `Blob` et `ObjectURL` | [`tp2/upload-et-lecture-audio.md`](./tp2/upload-et-lecture-audio.md) §3 à §5 |
 | Réponses aux questions mémoire / buffering / streaming | [`tp2/questions-memoire-buffering-streaming.md`](./tp2/questions-memoire-buffering-streaming.md) |
 
@@ -113,8 +110,7 @@ docs/
 | Progression d'upload | code : `tracks-page.ts` (`upload()`) · doc : [`tp3/progression-upload.md`](./tp3/progression-upload.md) |
 | Au moins trois tests frontend | 15 fichiers `*.spec.ts` dans `src/app/` (188 tests, tous verts) · doc : [`tp3/tests-automatises.md`](./tp3/tests-automatises.md) |
 | Rapport des tests (attendus et observés) | [`tp3/tests-automatises.md`](./tp3/tests-automatises.md) §1, §2, §5 et §7 |
-| Capture Network d'une suppression et d'un upload | **[À COMPLÉTER PAR LE BINÔME]** — procédures dans [`tp3/suppression-de-piste.md` §6](./tp3/suppression-de-piste.md#à-vérifier-soi-même) et [`tp3/progression-upload.md` §6](./tp3/progression-upload.md#à-vérifier-soi-même) |
-| `npm run build` exécuté | résultat dans [`tp3/tests-automatises.md`](./tp3/tests-automatises.md) §2 ; capture **[À COMPLÉTER PAR LE BINÔME]** |
+| `npm run build` exécuté | résultat dans [`tp3/tests-automatises.md`](./tp3/tests-automatises.md) §2 |
 | Rapport IA | `RAPPORT_IA_MODELE.md` |
 | Restitution orale (6 questions) | [`tp3/restitution-orale.md`](./tp3/restitution-orale.md) |
 
@@ -133,9 +129,6 @@ docs/
 | Relecture indépendante des bonus | [`bonus/relecture-independante.md`](./bonus/relecture-independante.md) |
 | Refonte UI/UX de la coque, connexion, inscription, profil | [`bonus/ui-ux-authentification.md`](./bonus/ui-ux-authentification.md) |
 
-Les captures Network des bonus restent **[À COMPLÉTER PAR LE BINÔME]** : la
-procédure est dans chaque document du dossier `bonus/`.
-
 > **Renvois `fichier:ligne` : état de la vérification.** Une passe a re-contrôlé les
 > renvois des documents sur le code **figé** (`backend/src/app.js` 885 lignes,
 > `tracks-page.ts` 1039 lignes, `tracks-page.html` 418, etc.). Elle ne garantit rien
@@ -153,7 +146,4 @@ procédure est dans chaque document du dossier `bonus/`.
    `Authorization` dans les DevTools, elle précise de ne relever que sa
    **présence**, jamais sa valeur.
 2. **Rien d'inventé.** Un constat n'est écrit que s'il est vérifiable dans le
-   code, avec sa ligne. Ce qui ne peut venir que d'une manipulation humaine —
-   une capture Network, une vérification faite par vous, une déclaration de ce
-   que vous savez expliquer — est marqué **[À COMPLÉTER PAR LE BINÔME]**, suivi
-   de la procédure exacte à suivre.
+   code, avec sa ligne.

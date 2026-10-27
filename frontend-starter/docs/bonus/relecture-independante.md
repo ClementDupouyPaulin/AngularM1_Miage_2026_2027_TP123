@@ -191,31 +191,11 @@ Ce que l'incident enseigne :
 | 3 | **Course entre deux `PUT` de pochette simultanés** : un fichier orphelin est possible (`replaceCover`, `backend/src/app.js:185-195`) | faible : deux modifications simultanées de la même pochette | demanderait un verrou ou une opération atomique côté base |
 | 4 | **Deux `GET /api/users/me` après un F5 sur `/profile`** (coque + page profil) | nulle fonctionnellement | voir [`ui-ux-authentification.md`](./ui-ux-authentification.md) §8 |
 | 5 | **`hasPrevious` / `hasNext` : code mort conservé** (`tracks-page.ts:135-136`) | nulle | plus lus par aucun template ni test depuis le `MatPaginator` ; non supprimés |
-| 6 | **Focus piégé des dialogues non vérifié par un test** : les tests couvrent Échap et la fermeture, pas la navigation au clavier | moyenne (accessibilité) | à vérifier à la main (marqueur ci-dessous) |
-| 7 | **Rendu navigateur non vérifié par un humain** : thème sombre, mouvement réduit, contrastes, lecteur d'écran, et toutes les captures Network | — | seul le binôme peut le faire |
+| 6 | **Focus piégé des dialogues non vérifié par un test** : les tests couvrent Échap et la fermeture, pas la navigation au clavier | moyenne (accessibilité) | à vérifier à la main |
+| 7 | **Rendu navigateur non vérifié par un humain** : thème sombre, mouvement réduit, contrastes, lecteur d'écran, et toutes les captures Network | — | seul un humain peut le faire |
 | 8 | **JWT expiré non testé** : seuls un jeton mal formé et un jeton signé avec un autre secret le sont | moyenne | jamais exercé en test ni en réel |
 | 9 | **Comparaison brute du nom dans « Enregistrer »** (`profile-page.ts:37-39`) : « Alice␣ » ≠ « Alice » active le bouton | cosmétique | le backend rogne ; effet nul |
 
 Ce qui est **dit** : ce document ne prétend pas que le code est sûr ; il dit que six
 défauts réels ont été trouvés **parce qu'un second agent a relu**, que neuf limites
 restent, et que la propreté d'une suite de tests verte ne les révèle pas.
-
----
-
-## 7. À faire par le binôme
-
-**[À COMPLÉTER PAR LE BINÔME]** — ce que personne d'autre ne peut faire :
-
-1. **Rejouer un défaut vous-mêmes.** Choisissez le défaut 2 : lancer le backend,
-   puis `curl -H "Authorization: Bearer <votre-jeton>" "http://localhost:3000/api/tracks?page=1e20"`
-   (ne recopiez pas le jeton dans le rapport). Relever le statut (attendu : `200`).
-   Si vous voulez voir l'ancien comportement, regardez `git show HEAD:backend/src/app.js`
-   (calcul de `page`) et expliquez en deux phrases pourquoi `1e20` posait problème.
-2. **Vérifier au clavier le piégeage du focus** des deux dialogues (limite n° 6) :
-   `Tab` répété ne doit pas sortir du dialogue ; `Échap` le ferme ; le focus revient
-   au bouton d'origine. Noter ce que vous observez réellement.
-3. **Vérifier le focus après suppression** : supprimer une piste au clavier (`Entrée`
-   sur « Supprimer », puis confirmer) ; le focus doit arriver sur le titre « Mes
-   pistes » et non disparaître.
-4. **Expliquer à l'oral** pourquoi une suite de tests verte n'a pas empêché ces six
-   défauts, et ce qu'apporte un second regard.

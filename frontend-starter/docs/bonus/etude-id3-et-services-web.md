@@ -240,8 +240,7 @@ d'Apple sont elles-mêmes annoncées « susceptibles de changer ».
 
 ### Décision ouverte : copier l'image sur notre serveur, ou ne garder que l'URL ?
 
-> **Cette décision n'est pas tranchée.** Ce document la **pose** ; elle appartient au
-> binôme.
+> **Cette décision n'est pas tranchée.** Ce document la **pose**.
 
 **Le constat.** La page de conditions d'utilisation de l'API de recherche d'Apple,
 lue pendant la rédaction, mentionne que certains contenus (les extraits audio,
@@ -273,19 +272,6 @@ de seconde main (à relire sur la source).
 
 L'option est **réversible** : on peut l'adopter plus tard sans perdre les pochettes
 déjà copiées (elles resteraient valables). Elle n'est **pas implémentée**.
-
-**[À COMPLÉTER PAR LE BINÔME]** — **décision à prendre et à écrire dans votre
-rapport** (`RAPPORT_IA_MODELE.md`), avec vos mots :
-
-1. Lisez vous-mêmes les conditions d'utilisation d'Apple pour la Search API
-   (`performance-partners.apple.com/search-api`, section des conditions). Notez ce
-   que vous y lisez **réellement** sur le téléchargement et la mise en cache.
-2. Dites si la conservation d'une copie de pochette dans une bibliothèque **privée**
-   vous semble compatible, et pourquoi.
-3. Choisissez : **garder la copie locale**, **passer à l'URL seule**, ou **retirer la
-   recherche Web** (et ne garder que l'upload et l'ID3). Justifiez en une phrase.
-4. Il n'y a pas de bonne réponse unique : le sujet évalue que vous avez
-   **identifié** la question et que vous savez argumenter un choix.
 
 ### Sécurité : la liste blanche d'hôtes (anti-SSRF)
 

@@ -364,7 +364,7 @@ script) », « SVG sans type MIME ») : une image SVG peut contenir du script.
 
 > **Non vérifié par un test** : le **piégeage du focus** dans les dialogues (Tab qui
 > ne sort pas du dialogue). Les tests couvrent la fermeture (Échap, boutons) mais pas
-> la navigation au clavier à l'intérieur. À vérifier à la main (marqueur ci-dessous).
+> la navigation au clavier à l'intérieur. À vérifier à la main.
 
 ---
 
@@ -394,37 +394,3 @@ d'autrui → `404` sur `GET`, `PUT`, `DELETE` ; upload audio + pochette en une r
 [`preuves-integration-reelle.md`](./preuves-integration-reelle.md).
 
 > Ces preuves valident le **contrat HTTP**, pas l'interface.
-
-### À vérifier par le binôme
-
-**[À COMPLÉTER PAR LE BINÔME]** — dans le navigateur, avec captures (jamais la valeur
-de l'en-tête `Authorization`) :
-
-1. **Upload avec pochette** : DevTools → **Network**, filtre **XHR/Fetch**. Choisir un
-   `.mp3` **et** une image, observer l'aperçu, cliquer « Envoyer ». Relever la requête
-   `POST /api/tracks` : `Content-Type: multipart/form-data; boundary=…`, et, dans le
-   *Payload*, **trois** champs : `audio`, `title`, `cover`. Refaire **sans** image :
-   le champ `cover` doit être **absent**.
-2. **`GET` de la pochette** : après l'upload, relever `GET /api/tracks/<id>/cover` :
-   statut `200`, `Content-Type` `image/*`, et la **présence** de l'en-tête
-   `Authorization` (c'est la preuve que l'image passe par `HttpClient`). Constater
-   qu'**aucune** requête `GET` directe de l'`<img>` vers `/api/...` n'apparaît avec un
-   `401`.
-3. **Recherche Web** : cliquer « Chercher sur le Web » ; relever `GET
-   /api/tracks/<id>/cover/search` (une seule requête, déclenchée par votre clic), les
-   requêtes d'images vers `*.mzstatic.com` (miniatures chargées par le navigateur),
-   puis, après « Utiliser cette pochette », `POST /api/tracks/<id>/cover/web` avec le
-   corps `{ "imageUrl": "https://…" }` et le statut `200`.
-4. **Remplacement en place** : après un « Changer la pochette », relever **un seul**
-   `PUT` puis un `GET …/cover` de la même piste, et **aucun** `GET /api/tracks?…` de
-   rechargement de liste.
-5. **Retrait** : « Retirer la pochette » → dialogue ; **Annuler** : aucune requête ;
-   **Retirer** : `DELETE …/cover` en `204`.
-6. **Clavier** : ouvrir chaque dialogue au clavier, appuyer sur `Tab` plusieurs fois :
-   le focus doit rester **dans** le dialogue ; `Échap` le ferme et le focus revient
-   au bouton d'origine. Noter ce que vous observez.
-7. **Erreur du service** : si possible, simuler l'indisponibilité du service (par
-   exemple en coupant le réseau pendant la recherche) et relever le message et le
-   bouton « Réessayer ».
-8. **Mémoire** : sur une page de 20 pistes avec pochettes, relever dans Network le
-   nombre de `GET …/cover` partis à l'affichage de la liste.

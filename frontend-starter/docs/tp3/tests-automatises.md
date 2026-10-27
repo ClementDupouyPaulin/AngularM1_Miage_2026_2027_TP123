@@ -202,7 +202,7 @@ d'ailleurs l'extension facultative que propose le sujet.
 Un troisième niveau existe, absent ici : le test **end-to-end** (Playwright,
 Cypress), qui pilote un vrai navigateur contre l'application complète. C'est le
 seul qui pourrait vérifier qu'un fichier audio se joue réellement — d'où les
-vérifications manuelles laissées au binôme.
+vérifications manuelles à faire dans le navigateur.
 
 ---
 
@@ -425,15 +425,6 @@ C'est aussi, sous une autre forme, la logique qui a été suivie dès le TP1 :
 bonne raison (voir [`../mission1/README.md`](../mission1/README.md), « 6 tests
 rouges sur 10 »). Un test qui n'a jamais été rouge n'a jamais été vérifié.
 
-> **[À COMPLÉTER PAR LE BINÔME]** — c'est la vérification la plus rapide à
-> refaire vous-mêmes, et la plus convaincante à l'oral. Choisissez **une** ligne
-> du tableau ci-dessus, appliquez la mutation, lancez `npm test`, capturez le
-> terminal **rouge** en notant quel test a échoué et avec quel message, puis
-> restaurez le fichier (`git diff` pour vérifier que vous n'avez rien laissé) et
-> relancez `npm test` pour capturer le retour au **vert**. Ces deux captures,
-> côte à côte, prouvent que votre test observe réellement quelque chose — ce
-> qu'une capture verte seule ne prouve pas.
-
 ---
 
 ## 7. Vérifications de contrat réellement exécutées contre l'API
@@ -471,9 +462,7 @@ et le #12 le `404` indistinguable de la Mission 5.
 > **Ces appels ne remplacent pas les captures Network.** Ils vérifient le
 > **contrat HTTP** vu de la ligne de commande. Ils ne prouvent rien sur la
 > confirmation de suppression, le SnackBar, la barre de progression ou la
-> lecture audio, qui n'existent que dans un navigateur. Les procédures
-> correspondantes sont dans [`suppression-de-piste.md`](./suppression-de-piste.md)
-> et [`progression-upload.md`](./progression-upload.md).
+> lecture audio, qui n'existent que dans un navigateur.
 
 ---
 
@@ -483,22 +472,3 @@ Le sujet demande un « rapport des tests avec résultats attendus et observés �
 Les tableaux des §1, §2, §5 et §7 le constituent : pour chaque test, le
 comportement attendu est le libellé du `it(...)`, et le résultat observé est la
 sortie de `npm test`.
-
-**[À COMPLÉTER PAR LE BINÔME]** :
-
-1. Lancer `npm test` dans `frontend-starter/`, capturer la sortie complète du
-   terminal (le récapitulatif final : nombre de fichiers, nombre de tests,
-   durée). **C'est ce chiffre-là qui fait foi**, pas le comptage statique du §2.
-2. Lancer `npm test` dans `backend/` et capturer de même (attendu : 2 verts).
-3. Lancer `npm run build` dans `frontend-starter/` et capturer le récapitulatif
-   de taille.
-4. Faire la vérification par mutation du §6 : deux captures, rouge puis vert.
-5. Ranger les captures dans `frontend-starter/docs/captures/` et les lier depuis
-   `RAPPORT_IA_MODELE.md`.
-
-**Ce que chaque membre sait expliquer sans l'assistant** :
-**[À COMPLÉTER PAR LE BINÔME]** — trois des six questions de la restitution
-orale portent sur cette mission (tests HTTP sans MongoDB, test d'intercepteur ou
-de guard, unitaire vs intégration). Assurez-vous de pouvoir **ouvrir un fichier
-de test au hasard et expliquer chaque ligne** : c'est la vérification la plus
-probable. Notez ici, chacun pour soi, ce que vous savez redire sans notes.

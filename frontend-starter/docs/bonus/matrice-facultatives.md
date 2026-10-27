@@ -6,7 +6,7 @@ vérifier d'un coup d'œil ce qui est fait, ce qui est prouvé et comment.
 
 Légende des preuves : **T** = test automatisé ; **R** = vérifié en ligne de
 commande contre le vrai serveur ([`preuves-integration-reelle.md`](./preuves-integration-reelle.md)) ;
-**N** = capture Network dans le navigateur, à produire par le binôme (aucune n'a
+**N** = capture Network dans le navigateur (aucune n'a
 été produite par les agents). Chemins relatifs à `frontend-starter/` pour le
 frontend, à la racine du dépôt pour `backend/`.
 
@@ -65,7 +65,7 @@ Web (iTunes, **uniquement sur action explicite**). Preuves : tests frontend (voi
 contre le serveur, MongoDB Atlas et iTunes. **Reste ouvert** : la décision sur la
 copie locale des pochettes Web au regard des conditions d'Apple
 ([`etude-id3-et-services-web.md`](./etude-id3-et-services-web.md) §5) — c'est une
-décision du binôme, pas un défaut de l'implémentation.
+décision à prendre, pas un défaut de l'implémentation.
 
 ---
 
@@ -82,13 +82,7 @@ décision du binôme, pas un défaut de l'implémentation.
 ## 3. Ce que ce tableau ne dit pas
 
 - **Les captures Network (N) n'ont été produites par personne.** Les preuves en
-  ligne de commande (R) valident le contrat HTTP, pas l'interface. Chaque
-  document cité plus haut contient la procédure exacte à suivre.
+  ligne de commande (R) valident le contrat HTTP, pas l'interface.
 - **« Fait » veut dire « implémenté et couvert par des tests »**, pas « validé par
-  un utilisateur dans un navigateur » : seul le binôme peut faire cette dernière
+  un utilisateur dans un navigateur » : seul un humain peut faire cette dernière
   vérification.
-
-**[À COMPLÉTER PAR LE BINÔME]** — pour chaque ligne marquée « N à produire »,
-joindre la capture correspondante au rapport (`RAPPORT_IA_MODELE.md`) et cocher
-ici ce que vous avez effectivement observé, avec la date. Ne cochez pas une ligne
-que vous n'avez pas vérifiée vous-mêmes dans le navigateur.

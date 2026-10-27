@@ -5,14 +5,6 @@
 - **Modèle** : Claude Sonnet 5 (identifiant `claude-sonnet-5`), via l'extension
   Claude Code dans VS Code (mode CLI intégré à l'IDE, pas une interface web).
 
-> **[À COMPLÉTER PAR LE BINÔME]** — l'identité du modèle n'est pas vérifiable
-> depuis le code : un assistant qui se nomme lui-même n'est pas une preuve.
-> Relevez-la vous-mêmes dans l'outil, puis confirmez ou corrigez la ligne
-> ci-dessus. Dans Claude Code : taper `/status` (ou `/model`) en mode
-> interactif ; le modèle actif y est affiché. Les sessions suivantes du projet
-> (TP2/TP3) ont utilisé un autre modèle : notez-le aussi, avec la mission
-> concernée, dans `RAPPORT_IA_MODELE.md`.
-
 ## Consommation de tokens
 
 - Dans Claude Code, la commande `/cost` (en mode interactif) affiche le coût
@@ -90,11 +82,3 @@ L'identifiant de l'utilisateur mis à jour vient **du token** (`req.auth.sub`,
 `{ name }` (`auth.service.ts:36`). Un utilisateur ne peut donc pas renommer le
 compte d'un autre, même en forgeant la requête : il n'existe aucun champ
 `userId` à falsifier.
-
-**Vérification à faire vous-mêmes** — **[À COMPLÉTER PAR LE BINÔME]** : dans
-l'onglet Network (filtre XHR/fetch), déclencher un « Enregistrer » sur
-`/profile` et relever pour la requête `PUT /api/users/me` : la méthode, l'URL,
-le corps JSON envoyé (onglet *Payload* / *Requête*), la présence de l'en-tête
-`Authorization` (onglet *Headers* — **ne recopiez pas sa valeur**, notez
-seulement qu'il est présent et commence par `Bearer`), le statut de la réponse
-et le JSON renvoyé. Joindre la capture au rapport.

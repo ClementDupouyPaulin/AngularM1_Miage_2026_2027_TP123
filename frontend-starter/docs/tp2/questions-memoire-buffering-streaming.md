@@ -331,23 +331,3 @@ avec `implements OnDestroy` + `ngOnDestroy()`. Elle a l'avantage de placer
 l'enregistrement du nettoyage juste à côté de la logique concernée (ici, dans le
 constructeur, à la suite du pipeline de lecture) plutôt que dans une méthode
 séparée en bas de la classe.
-
-### À vérifier soi-même
-
-**[À COMPLÉTER PAR LE BINÔME]** — procédure pour *voir* le mécanisme :
-
-1. Ouvrir `/tracks` connecté, DevTools → onglet **Console**.
-2. Lire une piste. Dans les messages, repérer
-   `[TracksPage] Audio chargé <id>` (`tracks-page.ts:292`).
-3. Lire une **deuxième** piste : repérer `[TracksPage] ObjectURL révoquée`
-   (`tracks-page.ts:990`) **avant** le `Audio chargé` de la nouvelle — c'est la
-   preuve que la première URL a été libérée.
-4. Naviguer vers `/profile` : le message `ObjectURL révoquée` doit apparaître une
-   fois de plus, sans nouvelle lecture — c'est le hook `onDestroy`.
-5. *(Optionnel, plus visuel)* : DevTools → onglet **Memory** → *Heap snapshot*,
-   filtrer sur `Blob`, comparer un instantané pris après 3 lectures avec un
-   autre pris après avoir quitté la page.
-6. *(Optionnel)* : dans la console, `URL.revokeObjectURL` à la main sur l'URL
-   affichée dans l'attribut `src` du lecteur, puis relancer la lecture :
-   constater que le lecteur passe en erreur. Cela montre bien qu'une URL révoquée
-   est définitivement inutilisable.

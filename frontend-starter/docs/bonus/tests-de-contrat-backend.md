@@ -181,13 +181,3 @@ l'agent de documentation (non rejouées ici) :
 Un test qui n'a jamais été vu rouge n'a jamais été vérifié : ces trois mutations
 sont ce qui permet de dire que les trois défenses les plus sensibles (injection
 dans le filtre, SSRF, isolation entre comptes) sont **réellement surveillées**.
-
-**[À COMPLÉTER PAR LE BINÔME]** — rejouer au moins une mutation vous-mêmes :
-
-1. Dans `backend/src/app.js`, remplacer `escapeRegex(search)` (ligne 558) par
-   `search`.
-2. `cd backend && npm test` : relever **quel test** échoue et son message ; faire
-   une capture du terminal rouge.
-3. Restaurer, vérifier avec `git diff backend/src/app.js` qu'il ne reste que les
-   modifications attendues, relancer `npm test` et capturer le retour au vert.
-4. Joindre les deux captures au rapport.

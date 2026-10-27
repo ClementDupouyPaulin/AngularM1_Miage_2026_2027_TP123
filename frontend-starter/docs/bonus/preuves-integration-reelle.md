@@ -19,9 +19,8 @@ contre le **vrai serveur**, **MongoDB Atlas** et le **vrai service iTunes**.
 | des preuves du **contrat HTTP** vu depuis un client quelconque | des preuves sur l'interface : rendu, accessibilité, SnackBar, dialogue, barre de progression |
 | une preuve que le serveur se comporte comme les tests le supposent | une preuve que le **frontend** parle correctement à ce serveur |
 
-Les captures Network demandées par les sujets restent à produire par le binôme
-dans le navigateur : voir les marqueurs **[À COMPLÉTER PAR LE BINÔME]** des
-autres documents de ce dossier et la fin de celui-ci.
+Les captures Network demandées par les sujets se font dans le navigateur, pas en
+ligne de commande.
 
 ## Conditions d'exécution
 
@@ -162,16 +161,3 @@ et la limite de **trois redirections** (couverte par un test simulé,
 `securite-bonus.test.js:284`, jamais en réel). Les valeurs de `prevPage` / `hasPrevPage` sur une page
 hors bornes n'ont pas non plus été relevées (voir
 [`pagination-mongoose.md` §4](./pagination-mongoose.md#4-ce-qui-change-dans-la-réponse)).
-
-**[À COMPLÉTER PAR LE BINÔME]** — les captures Network, dans le navigateur, qui
-ne peuvent pas être remplacées par ces preuves en ligne de commande :
-
-1. **Pagination et filtre** : voir [`pagination-mongoose.md`](./pagination-mongoose.md),
-   [`filtre-par-titre.md`](./filtre-par-titre.md) et
-   [`materiel-paginator.md`](./materiel-paginator.md) (chacun détaille la
-   procédure).
-2. **Suppression et upload avec progression** : voir
-   [`../tp3/suppression-de-piste.md`](../tp3/suppression-de-piste.md) et
-   [`../tp3/progression-upload.md`](../tp3/progression-upload.md).
-3. Pour **chaque** capture : méthode, URL, statut, **présence** de l'en-tête
-   `Authorization` (jamais sa valeur).

@@ -204,20 +204,3 @@ aide liée par `aria-describedby` (`:182`, `:195`) ; test `:594`.
 littéralement → **0** ; `q=(` → **200** sans plantage ; 101 caractères → **400** ;
 filtre + pagination → **3** résultats sur **2** pages. Détail et limites dans
 [`preuves-integration-reelle.md`](./preuves-integration-reelle.md).
-
-### À faire par le binôme
-
-**[À COMPLÉTER PAR LE BINÔME]** — captures Network du filtre, dans le navigateur :
-
-1. Sur `/tracks`, DevTools → **Network** → filtre **XHR/Fetch**, liste vidée.
-2. Taper lentement « blues » dans « Filtrer par titre ». Relever que **le nombre
-   de requêtes `GET /api/tracks?...&q=...` est inférieur au nombre de touches**
-   (anti-rebond), et que la dernière porte `q=blues`.
-3. Taper « bl » puis, **avant 300 ms**, « ues » : une seule requête part.
-   Pour voir une annulation, activer le bridage « Slow 4G » : une requête plus
-   ancienne apparaît en **(cancelled)**.
-4. Relever que la requête porte `page=1` même si vous étiez en page 2 avant de
-   filtrer.
-5. Saisir `.*` : relever que la réponse n'est **pas** « toutes les pistes »
-   (`total` à 0 si aucun titre ne contient littéralement `.*`).
-6. Noter l'annonce affichée sous le champ (« N pistes trouvées pour… »).

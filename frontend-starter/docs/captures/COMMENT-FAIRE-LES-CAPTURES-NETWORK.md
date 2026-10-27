@@ -33,9 +33,8 @@ et l'onglet utile (*Headers*, *Payload* ou *Response*).
 ## Où ranger les images
 
 Dans ce dossier (`frontend-starter/docs/captures/`), avec des noms parlants :
-`01-login-401.png`, `04-upload-piste-201.png`… Puis, dans `docs/README.md` et
-`RAPPORT_IA_MODELE.md`, remplace chaque `[À COMPLÉTER PAR LE BINÔME]` par un lien vers l'image
-et une phrase **de toi** : ce que tu y vois et pourquoi c'est correct.
+`01-login-401.png`, `04-upload-piste-201.png`… Tu peux ensuite les référencer dans
+`RAPPORT_IA_MODELE.md`, avec une phrase **de toi** : ce que tu y vois et pourquoi c'est correct.
 
 ## Si une requête n'apparaît pas
 

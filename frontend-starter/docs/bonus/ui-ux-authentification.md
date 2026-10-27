@@ -53,7 +53,7 @@ commentaire : « pas seulement la couleur »). Un champ invalide reçoit en plus
 
 > Les **ratios de contraste** des couleurs choisies n'ont pas été mesurés dans
 > cette session : aucune affirmation de conformité à un niveau WCAG n'est faite
-> ici. Voir le marqueur en fin de document.
+> ici.
 
 ---
 
@@ -364,11 +364,6 @@ l'`Observable` dans `AuthService`), ce qui ajoute de la complexité pour un gain
 faible. À signaler plutôt qu'à masquer. Sur `/tracks` après un F5, une seule
 requête part (celle de la coque).
 
-**[À COMPLÉTER PAR LE BINÔME]** — constater cette limite vous-mêmes : DevTools →
-**Network**, filtre **XHR/Fetch** ; se connecter, aller sur `/profile`, vider la
-liste, **F5** : relever le nombre de requêtes `GET /api/users/me` (attendu : 2).
-Refaire sur `/tracks` : 1.
-
 ---
 
 ## 9. Vérifications
@@ -384,23 +379,3 @@ Refaire sur `/tracks` : 1.
 animations) : le thème sombre, `prefers-reduced-motion`, le visuel du lien
 d'évitement au focus, les contrastes, et l'expérience réelle avec un lecteur
 d'écran.
-
-**[À COMPLÉTER PAR LE BINÔME]** — vérifications dans le navigateur, avec captures :
-
-1. **Clavier** : sans souris, appuyer sur `Tab` en arrivant sur la page. Le premier
-   arrêt doit être « Aller au contenu principal » (visible). Appuyer sur `Entrée` :
-   le focus doit passer au contenu **sans que l'URL ne change vers la racine**.
-   Noter ce que vous observez réellement (voir la réserve du §4).
-2. **Thème sombre** : DevTools → `⋮` → *More tools* → **Rendering** → *Emulate CSS
-   media feature prefers-color-scheme* : `dark`. Capturer les pages connexion et
-   profil.
-3. **Mouvement réduit** : même panneau, *Emulate CSS media feature
-   prefers-reduced-motion* : `reduce`. Lancer une connexion lente (bridage
-   « Slow 4G ») : l'indicateur ne doit plus tourner, le texte « Connexion en
-   cours… » doit rester.
-4. **Contraste** : relever (par exemple avec l'audit *Accessibility* de Lighthouse
-   dans DevTools) les éventuels avertissements de contraste, dans les deux thèmes,
-   et les noter **tels qu'ils s'affichent**. Ce document ne revendique aucun ratio.
-5. **Lecteur d'écran** (facultatif) : VoiceOver (macOS) ou NVDA (Windows) sur le
-   formulaire de connexion avec un champ en erreur : l'erreur doit être lue avec
-   le champ.

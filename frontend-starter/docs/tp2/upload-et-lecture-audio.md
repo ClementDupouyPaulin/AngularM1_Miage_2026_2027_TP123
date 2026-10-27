@@ -278,29 +278,6 @@ En résumé : on remplace *une requête réseau que le navigateur ferait sans
 pouvoir s'authentifier* par *une requête réseau faite par Angular avec le JWT,
 suivie d'une référence purement locale*.
 
-### À vérifier soi-même dans les DevTools
-
-**[À COMPLÉTER PAR LE BINÔME]** — procédure exacte :
-
-1. Ouvrir l'application connectée sur `/tracks`, ouvrir les DevTools (F12),
-   onglet **Network**, filtre **XHR/Fetch** ; vider la liste.
-2. Cliquer « Écouter » sur une piste. Une seule ligne apparaît :
-   `GET /api/tracks/<id>/audio`.
-3. La sélectionner, onglet **Headers** → section *Request Headers* : constater
-   la présence de `Authorization: Bearer ...`. **Ne recopiez pas la valeur du
-   token** dans une capture : masquez-la, ou ne capturez que le nom de l'en-tête.
-4. Relever aussi : le statut (`200`), le `Content-Type` de la réponse (par
-   exemple `audio/mpeg`, posé par `res.type()`, `backend/src/app.js:672`) et le
-   `Content-Length` (la taille du fichier).
-5. Vérifier qu'aucune requête réseau **supplémentaire** n'apparaît quand la
-   lecture démarre : la balise `<audio>` lit une URL `blob:`, pas le réseau.
-   (Attention : si le filtre « All » est actif, comparer avec le §5 du document
-   [`questions-memoire-buffering-streaming.md`](./questions-memoire-buffering-streaming.md)
-   sur ce qu'on verrait avec un `src` HTTP direct.)
-6. Relever enfin la preuve d'isolation demandée par le Checkpoint : se
-   connecter avec un **autre** compte, tenter `GET /api/tracks/<id>/audio` avec
-   l'`id` d'une piste du premier compte, et constater le `404`.
-
 ---
 
 ## 5. `Blob` téléchargé, buffering navigateur, streaming serveur
@@ -414,27 +391,3 @@ serveur ne peut pas offrir :
    ici volontairement **plus permissif**, et laisse le backend trancher. C'est
    le bon sens de la dépendance : le frontend ne doit jamais refuser ce que le
    serveur accepterait, et son acceptation n'engage rien.
-
-### À vérifier soi-même
-
-**[À COMPLÉTER PAR LE BINÔME]** — deux manipulations demandées par le
-Checkpoint Network du TP2 :
-
-1. **Refus côté frontend** : sélectionner un fichier non audio (par exemple un
-   `.pdf` ou un `.txt` — il faudra choisir « Tous les fichiers » dans la boîte
-   de dialogue pour contourner l'attribut `accept`), cliquer « Envoyer ».
-   Constater dans l'onglet Network qu'**aucune requête `POST /api/tracks`
-   n'est émise**, et relever le message affiché à l'écran.
-2. **Refus côté backend (le `400` du Checkpoint)** : c'est le cas que le
-   frontend laisse volontairement passer. Prendre un fichier dont
-   `File.type` est vide ou inattendu mais dont l'extension figure dans
-   `ALLOWED_EXTENSIONS` — par exemple renommer un `.txt` en `.mp3`. Le
-   frontend l'accepte (repli sur l'extension), le backend le refuse.
-   Relever : la requête `POST /api/tracks` en `400`, le corps de la réponse
-   (`{ "message": "Format audio non accepté" }`) et le message affiché dans la
-   page. C'est la démonstration concrète que les deux validations ne sont pas
-   redondantes.
-3. **Upload valide** : relever pour la requête `POST /api/tracks` la méthode,
-   l'URL, le `Content-Type` de la requête (il doit contenir
-   `multipart/form-data; boundary=...`), le contenu du *Payload* (les deux
-   champs `audio` et `title` doivent y apparaître) et le statut `201`.

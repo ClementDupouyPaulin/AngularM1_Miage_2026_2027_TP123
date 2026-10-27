@@ -295,11 +295,3 @@ le contrat mais relèvent du lot de documentation consacré aux pochettes.
 |---|---|---|
 | Test « pagination page + limit avec les champs ajoutés et ownerId casté » (`backend/test/tracks.test.js:376`) | test automatisé, MongoDB simulé | vert (backend : 52/52) |
 | Pagination `limit=5` sur 7 pistes : page 1 = 5 items, `total` 7, `pages` 2, `hasNextPage` vrai, `nextPage` 2, `prevPage` nul ; page 2 = 2 items, `hasPrevPage` vrai ; page 99 = items vides | ligne de commande, vrai serveur + MongoDB Atlas | OK (voir `preuves-integration-reelle.md`) |
-
-**[À COMPLÉTER PAR LE BINÔME]** — capture Network de la pagination dans le
-navigateur : avec au moins 6 pistes, ouvrir DevTools → onglet **Network**, filtre
-**XHR/Fetch**, aller en page 2 avec le paginator, sélectionner la requête
-`GET /api/tracks?page=2&limit=5`, onglet **Response**, et relever que la réponse
-contient bien les **neuf** clés (`items`, `page`, `limit`, `total`, `pages`,
-`hasPrevPage`, `hasNextPage`, `prevPage`, `nextPage`). Ne capturez pas la valeur
-de l'en-tête `Authorization`.

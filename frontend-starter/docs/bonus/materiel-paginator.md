@@ -177,16 +177,3 @@ page et taille (`pageIndex = page - 1`) ; libellés français ; « Page suivante
 émet la requête de la page 2 ; « Dernière page » demande directement la page 3 ;
 boutons désactivés aux bornes ; désactivé pendant un chargement ; changement de
 taille → page 1 ; une seule requête par changement.
-
-**[À COMPLÉTER PAR LE BINÔME]** — capture Network du paginator, dans le
-navigateur (il faut au moins 6 pistes, 11 pour voir trois pages) :
-
-1. DevTools → **Network** → filtre **XHR/Fetch**, liste vidée.
-2. Cliquer « Page suivante » : relever **une seule** requête
-   `GET /api/tracks?page=2&limit=5`.
-3. Cliquer « Dernière page » : relever `page=` égal au nombre de pages.
-4. Dans « Pistes par page », choisir 10 : relever `page=1&limit=10`, **même si
-   vous étiez en page 2** — c'est la preuve du retour en page 1.
-5. Constater que les boutons « Première page » et « Page précédente » sont
-   inactifs en page 1.
-6. Joindre les captures au rapport (sans la valeur de l'en-tête `Authorization`).

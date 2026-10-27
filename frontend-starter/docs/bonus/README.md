@@ -22,25 +22,13 @@ Mongoose). Voir `RAPPORT_IA_MODELE.md`, section « Bonus et refonte UI/UX ».
 | **Ce que la relecture a trouvé** (6 défauts), ce qu'elle n'a pas trouvé, les limites | [`relecture-independante.md`](./relecture-independante.md) |
 | Les choix UI/UX : thème sombre, mouvement réduit, accessibilité des formulaires | [`ui-ux-authentification.md`](./ui-ux-authentification.md) |
 
-## Ce qui reste à faire par le binôme
-
-La documentation est complète pour le périmètre des bonus ; ce qui reste ne peut pas
-être écrit par un assistant : captures Network dans le navigateur, vérification
-visuelle (clair/sombre, mouvement réduit), vérification au clavier (dont le focus
-des dialogues), décision sur les conditions d'Apple, déclaration de ce que chacun
-sait expliquer, identité du modèle utilisé. La liste complète figure dans
-`RAPPORT_IA_MODELE.md`, section « Bonus et refonte UI/UX ».
-
 ## Trois règles valables pour tous ces documents
 
 1. **Réel, simulé, non vérifié : toujours distingués.** Une affirmation est
    étiquetée selon qu'elle a été *observée* contre le vrai serveur, *vérifiée par
    un test* qui simule MongoDB ou le réseau, ou *non vérifiée dans cette
    session*. Le dernier cas est écrit explicitement.
-2. **Les preuves en ligne de commande ne sont pas des captures Network.** Les
-   captures du navigateur restent à produire par le binôme
-   (**[À COMPLÉTER PAR LE BINÔME]**, avec la procédure exacte dans chaque
-   document).
+2. **Les preuves en ligne de commande ne sont pas des captures Network.**
 3. **Numéros de ligne : vérifiés sur le code figé, pas garantis pour la suite.** Les
    renvois `fichier:ligne` ont été re-contrôlés une fois le code gelé
    (`backend/src/app.js` 885 lignes, `tracks-page.ts` 1039 lignes). Tout changement

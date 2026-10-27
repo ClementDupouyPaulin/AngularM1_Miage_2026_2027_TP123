@@ -4,10 +4,7 @@ Pour chaque mission, détailler et fournir des explications concernant : objecti
 
 > Les sections ci-dessous sont pré-remplies par l'assistant IA avec les
 > éléments factuels de la session (prompts réels, fichiers touchés,
-> vérifications lancées). Les parties marquées **[À COMPLÉTER PAR LE
-> BINÔME]** ne peuvent pas être écrites par l'assistant : elles demandent
-> vos captures d'écran et votre propre évaluation de ce que vous savez
-> expliquer sans aide.
+> vérifications lancées).
 
 ## Assistant et mode utilisés
 
@@ -20,10 +17,7 @@ Pour chaque mission, détailler et fournir des explications concernant : objecti
 Pendant la préparation Atlas, un mot de passe MongoDB réel a été collé par
 erreur dans le chat de l'assistant (au lieu d'être saisi directement dans
 `.env`). L'assistant l'a signalé immédiatement et a demandé la rotation du
-mot de passe sur Atlas avant de continuer. **[À COMPLÉTER PAR LE BINÔME]** :
-confirmer ici que le mot de passe a bien été changé, et noter cet incident
-comme rappel de la règle "ne jamais transmettre un secret à un assistant"
-(section 9 de `CONSEILS_POUR_UTIISER_ASSISTANT_AI.md`).
+mot de passe sur Atlas avant de continuer.
 
 ---
 
@@ -60,12 +54,6 @@ modifier le code au début"). Livrable ajouté ensuite :
 (schéma + explication Signal vs `localStorage`).
 
 **Preuve de fonctionnement** : sans objet (pas de code exécuté).
-
-**Ce que chaque membre sait maintenant expliquer sans l'agent** :
-**[À COMPLÉTER PAR LE BINÔME]** — par exemple : le trajet complet d'une
-requête `login`, pourquoi `authGuard` ne suffit pas à garantir un token
-valide, la différence entre l'intercepteur qui *ajoute* le token et celui
-qui *réagit* à un 401.
 
 ---
 
@@ -160,18 +148,6 @@ Documentation :
   suite de tests a grossi depuis, par paliers : **13 → 36 → 41 → 59 → 65 → 66**
   (66 = fin du TP3). Le total final, après les bonus, est de **188 tests verts sur
   188** ; détail au § « Bilan des vérifications automatisées » en fin de rapport.*
-- **[À COMPLÉTER PAR LE BINÔME]** : capture(s) d'écran du terminal
-  `npm test` en vert, et captures DevTools/Network demandées par le
-  Checkpoint du sujet (connexion réussie, connexion refusée, requête
-  `/api/users/me`) — à réaliser en testant vous-même l'application dans le
-  navigateur, avec vos identifiants, pas ceux de l'assistant.
-
-**Ce que chaque membre sait maintenant expliquer sans l'agent** :
-**[À COMPLÉTER PAR LE BINÔME]** — par exemple : pourquoi `currentUser` n'est
-pas persisté comme `token`, ce que fait concrètement
-`authErrorInterceptor` et pourquoi il est nécessaire en plus de
-`authGuard`, pourquoi `Validators.minLength(8)` côté frontend n'est pas une
-vraie mesure de sécurité tant que le backend ne valide rien.
 
 ---
 
@@ -240,13 +216,6 @@ utilisés : les tests automatisés de l'agent C, et la vérification systématiq
 des affirmations de chaque agent dans le code par l'agent D (voir la section
 « Mission Documentation » plus bas).
 
-**[À COMPLÉTER PAR LE BINÔME]** : indiquer ici le modèle et le niveau de
-raisonnement effectivement utilisés pour ces sessions (relevé dans l'outil, pas
-demandé à l'assistant : voir la procédure dans
-`frontend-starter/docs/mission1/questions-reponses.md`), ainsi que la
-consommation observée si votre outil l'affiche (`/cost` dans Claude Code en mode
-interactif). Une estimation donnée par le modèle n'est pas une mesure.
-
 ---
 
 ## Mission 1 bis — Corrections d'authentification après revue (TP1 consolidé)
@@ -307,15 +276,6 @@ grossi par paliers successifs — **13 → 36 → 41 → 59 → 65 → 66** (fin
 jusqu'à **188** après les bonus ; le total final mesuré est au § « Bilan des
 vérifications automatisées » en fin de rapport.
 
-**[À COMPLÉTER PAR LE BINÔME]** — vérification manuelle demandée : se connecter
-avec un mot de passe volontairement faux et constater que (a) le message
-d'erreur apparaît sous le formulaire, (b) on **reste** sur `/login`, (c) dans
-l'onglet Network, la requête `POST /api/auth/login` est bien en `401`. Puis, à
-l'inverse, altérer un caractère du token dans `localStorage` (clé `gpc_token`),
-naviguer vers `/profile`, et constater le `401` **suivi** d'une redirection
-automatique vers `/login` : c'est la démonstration que les deux sens du `401`
-sont bien distingués. Joindre les captures.
-
 ---
 
 ## Mission 2 — Bibliothèque paginée (TP2)
@@ -357,13 +317,6 @@ erreur après cette étape. Les tests de pagination sont dans
 bornes, pas de requête pour la page déjà affichée) et dans
 `track.service.spec.ts` (« transmet les valeurs de page et limit demandées dans
 la query string »). Chiffres complets au § « Bilan » en fin de rapport.
-
-**[À COMPLÉTER PAR LE BINÔME]** — Checkpoint Network du TP2 : uploader au moins
-6 fichiers pour avoir deux pages, puis cliquer « Suivant » et « Précédent » en
-gardant l'onglet Network ouvert (filtre XHR/fetch). Relever pour chaque clic la
-requête `GET /api/tracks?page=...&limit=...` et vérifier que **le paramètre
-`page` change à chaque fois** — c'est exactement la preuve que la pagination est
-faite par le serveur et non localement. Joindre la capture.
 
 ---
 
@@ -450,35 +403,6 @@ Preuves de contrat réellement obtenues contre l'API en fonctionnement :
 `200`, `content-type: audio/mpeg`, 552 994 octets ; **sans** JWT → `401` (la
 démonstration directe de « pourquoi une URL dans `src` ne marche pas »).
 
-**[À COMPLÉTER PAR LE BINÔME]** — trois vérifications, toutes détaillées pas à
-pas dans `frontend-starter/docs/tp2/` :
-
-1. **Upload valide** : relever la requête `POST /api/tracks`, vérifier que son
-   `Content-Type` contient `multipart/form-data; boundary=...` et que le
-   *Payload* montre bien les deux champs `audio` et `title`. Statut attendu
-   `201`.
-2. **Lecture authentifiée** : relever `GET /api/tracks/<id>/audio`, constater la
-   **présence** de l'en-tête `Authorization` — sans jamais recopier sa valeur —
-   et le `Content-Type` audio de la réponse.
-3. **Erreur `400` sur fichier invalide** : la procédure du §6 de
-   `upload-et-lecture-audio.md` explique comment obtenir les **deux** refus, le
-   refus local (aucune requête émise) et le refus serveur (`400` avec son
-   message). C'est la démonstration concrète que les deux validations ne sont pas
-   redondantes.
-4. **Isolation entre comptes** : avec un second compte, tenter de lire l'`id`
-   d'une piste du premier et constater le `404`.
-
-**Ce que chaque membre sait maintenant expliquer sans l'agent** :
-**[À COMPLÉTER PAR LE BINÔME]** — la question la plus probable à l'oral est
-« pourquoi ne pas mettre simplement l'URL dans `src` ? ». Assurez-vous de
-pouvoir répondre sans notes, puis notez ici ce que chacun sait expliquer : le
-trajet complet des octets (composant → service → `HttpClient` → API, puis
-API → `Blob` → `ObjectURL` → lecteur), pourquoi un attribut `src` ne peut pas
-porter d'en-tête `Authorization`, la différence entre streaming serveur /
-téléchargement complet d'un `Blob` / buffering navigateur, ce que le choix du
-`Blob` fait perdre, et pourquoi il faut révoquer l'`ObjectURL` à deux endroits
-différents.
-
 ---
 
 ## Mission 5 — Suppression d'une piste (TP3)
@@ -539,12 +463,6 @@ supprimée → **`404 {"message":"Piste inconnue"}`**.
 §5 entier répond à la question du sujet « pourquoi le guard Angular et
 l'interface ne suffisent pas ».
 
-**[À COMPLÉTER PAR LE BINÔME]** — captures Network demandées : une suppression
-**annulée** (aucune requête ne doit apparaître — c'est la moitié de la preuve
-qu'on oublie), puis une suppression **confirmée** (`DELETE` en `204`, suivi du
-`GET /api/tracks` de rechargement). Procédure détaillée dans
-`docs/tp3/suppression-de-piste.md` §6.
-
 ---
 
 ## Mission 6 — Progression de l'upload (TP3)
@@ -604,13 +522,6 @@ Preuves de contrat obtenues contre l'API réelle, qui illustrent directement le
 **`400 {"message":"Fichier audio requis"}`** ; multipart valide → **`201`**.
 
 **Documentation** : `frontend-starter/docs/tp3/progression-upload.md`.
-
-**[À COMPLÉTER PAR LE BINÔME]** — deux captures demandées : la barre **en cours**
-de remplissage (activer le bridage réseau « Slow 4G » dans l'onglet Network, sinon
-le transfert est trop rapide pour être vu), et surtout la capture la plus
-démonstrative : un `.txt` renommé en `.mp3`, où la barre atteint **100 %** puis
-le message « Format audio non accepté » s'affiche. Procédure dans
-`docs/tp3/progression-upload.md` §6.
 
 ---
 
@@ -688,14 +599,6 @@ détecte que ce qu'on a pensé à tester.
 « rapport des tests » demandé en livrable) et
 `frontend-starter/docs/tp3/restitution-orale.md` (les 6 questions de l'oral).
 
-**[À COMPLÉTER PAR LE BINÔME]** — la vérification la plus rapide et la plus
-convaincante à l'oral : choisir une ligne du tableau de mutations
-(`docs/tp3/tests-automatises.md` §6), la casser, lancer `npm test`, capturer le
-terminal **rouge** en notant quel test échoue et avec quel message, restaurer
-(`git diff` pour vérifier qu'il ne reste rien), relancer et capturer le **vert**.
-Ces deux captures côte à côte prouvent que vos tests observent réellement quelque
-chose — ce qu'une capture verte seule ne prouve pas.
-
 ---
 
 ## Bonus et refonte UI/UX (facultatifs TP2 et TP3)
@@ -772,7 +675,7 @@ part de chaque élément n'a pas été mesurée.
 | **Simulé** — 50 nouveaux tests backend (31 + 19), MongoDB et réseau remplacés | six cas du sujet, ID3, filtre, pochettes, anti-SSRF, durcissements | `docs/bonus/tests-de-contrat-backend.md` |
 | **Simulé** — tests frontend avec `HttpTestingController` | filtre, paginator, états vides, dialogues, pochettes | `docs/bonus/` |
 | **Jamais prouvé en réel** | JWT expiré (jamais testé), délai réel de 5 s (jamais atteint), limite d'appels d'Apple (~20/min), redirections limitées à 3 (test simulé seulement), valeurs de `prevPage` hors bornes | `docs/bonus/preuves-integration-reelle.md` |
-| **Non vérifié du tout** | rendu navigateur : thème sombre, mouvement réduit, contrastes, lecteur d'écran, **piégeage du focus des dialogues** ; **toutes les captures Network** | marqueurs ci-dessous |
+| **Non vérifié du tout** | rendu navigateur : thème sombre, mouvement réduit, contrastes, lecteur d'écran, **piégeage du focus des dialogues** ; **toutes les captures Network** | section « Ce que seul l'étudiant peut faire » ci-dessous |
 
 Ces preuves en ligne de commande valident le **contrat HTTP**. Elles ne sont **pas**
 des captures Network du navigateur et ne les remplacent pas. Le serveur de test
@@ -844,7 +747,7 @@ signaler ce qui ne colle pas.
 | Des commentaires **du code** (`cover-file.ts`, `tracks-page.ts`) citent encore des lignes du backend qui ont bougé | commentaires périmés dans le code | **signalé, non modifié** (hors périmètre de D) |
 | Conditions d'Apple vs notre copie locale des pochettes web | question de droits | **décision ouverte**, voir ci-dessous |
 
-### Décision ouverte, à prendre par le binôme : copie locale des pochettes web
+### Décision ouverte : copie locale des pochettes web
 
 Les conditions d'utilisation de l'API de recherche d'Apple, lues pendant la rédaction
 (résumé obtenu, de seconde main), mentionnent que certains contenus doivent être
@@ -875,10 +778,9 @@ pas** que tous les renvois sont exacts. Là où un numéro n'était pas garanti,
 nom de la fonction a été conservé. Le risque réel reste qu'un étudiant se fie à un
 numéro sans lire le nom.
 
-### Ce que seul le binôme peut faire (et que personne n'a fait)
+### Ce que seul l'étudiant peut faire (et qu'aucun agent n'a fait)
 
-Aucun marqueur `[À COMPLÉTER PAR LE BINÔME]` n'a été rempli par un agent. Chacun est
-détaillé pas à pas (onglet, clics, valeur à relever) dans le document indiqué.
+Aucune de ces vérifications n'a été réalisée par un agent.
 
 1. **Captures Network du navigateur** — pagination (`pagination-mongoose.md`), filtre `q` (`filtre-par-titre.md`), paginator (`materiel-paginator.md`), upload avec `cover`, `GET …/cover`, recherche Web, remplacement en place, retrait (`pochettes.md` §8), suppression et upload avec progression (`tp3/`).
 2. **Vérification visuelle** : thème clair et sombre, mouvement réduit, contrastes (`ui-ux-authentification.md`).
@@ -888,11 +790,6 @@ détaillé pas à pas (onglet, clics, valeur à relever) dans le document indiqu
 6. **Décider** de la copie locale des pochettes web après lecture des conditions d'Apple — `etude-id3-et-services-web.md` §5.
 7. **Constater** les deux `GET /api/users/me` après un F5 sur `/profile` — `ui-ux-authentification.md` §8.
 8. **Cocher** ce que vous avez réellement vérifié, ligne par ligne — `matrice-facultatives.md`.
-9. **Test à deux des questions orales** (TP3, grille d'auto-évaluation) et **ce que chaque membre sait expliquer sans l'agent** sur les bonus — par exemple pourquoi un filtre local serait interdit, pourquoi on échappe les métacaractères, ce qu'est une SSRF et pourquoi on teste la *fin* de l'hôte, pourquoi un test qui simule MongoDB ne prouve pas ce que fait MongoDB, pourquoi une suite verte n'a pas empêché six défauts : [À COMPLÉTER PAR LE BINÔME].
-10. **Identité du modèle et niveau de raisonnement** réellement utilisés, relevés dans l'outil et non demandés à l'assistant : [À COMPLÉTER PAR LE BINÔME].
-11. **Confirmer que le mot de passe MongoDB exposé plus tôt dans le chat a bien été changé sur Atlas** (voir « Remarque de sécurité » au début du rapport) : [À COMPLÉTER PAR LE BINÔME].
-
-**Total des marqueurs `[À COMPLÉTER PAR LE BINÔME]` dans la documentation et ce rapport : 52 occurrences littérales**, comptées par recherche textuelle sur `frontend-starter/docs/**` et ce fichier : 25 consignes de procédure dans les documents thématiques (`mission1/`, `tp2/`, `tp3/`, `bonus/`), 19 dans ce rapport (y compris les rappels de cette liste), 8 renvois dans les deux index (`docs/README.md`, `bonus/README.md`). Toutes sont à traiter par le binôme ; aucune n'a été remplie. Ce décompte est une mesure textuelle, pas une liste de tâches distinctes : plusieurs occurrences désignent la même capture.
 
 **Documentation produite** : `frontend-starter/docs/bonus/` (index, `matrice-facultatives.md`,
 `pagination-mongoose.md`, `filtre-par-titre.md`, `materiel-paginator.md`,
@@ -918,10 +815,8 @@ l'application.
    son `fichier:ligne`. Les conclusions des autres agents ont été revérifiées à
    la source avant d'être reprises (voir l'écart trouvé, Mission 3).
 2. **Ne rien fabriquer d'humain.** Aucune capture Network, aucun résultat de
-   test, aucun compteur de tokens, aucune vérification faite par le binôme n'est
-   inventé. Chacun de ces points est marqué **[À COMPLÉTER PAR LE BINÔME]** et
-   accompagné d'une procédure précise : quel onglet ouvrir, quoi cliquer, quoi
-   relever.
+   test, aucun compteur de tokens, aucune vérification faite par l'étudiant n'est
+   inventé.
 3. **Aucun secret.** Pas d'URI MongoDB, pas de secret JWT, pas de mot de passe,
    pas de valeur de token. Les procédures de vérification précisent de ne relever
    que la **présence** de l'en-tête `Authorization`, jamais sa valeur.
@@ -1080,14 +975,8 @@ HTTP vu de la ligne de commande ; ils ne prouvent rien sur la confirmation de
 suppression, le SnackBar, la barre de progression ou la lecture audio, qui
 n'existent que dans un navigateur.
 
-**[À COMPLÉTER PAR LE BINÔME]** : relancer vous-mêmes ces commandes et joindre
-une capture du terminal. Un résultat rapporté par un assistant n'est pas une
-preuve : c'est la commande que vous exécutez qui en est une. Rangez les captures
-dans `frontend-starter/docs/captures/` et liez-les depuis ce fichier, par
-exemple `![npm test](frontend-starter/docs/captures/npm-test.png)`.
-
 Ce qu'une suite de tests verte **ne** prouve pas, et qu'il faut donc vérifier à
-la main dans le navigateur (procédures dans `frontend-starter/docs/`) : que
+la main dans le navigateur : que
 l'interface est réellement utilisable, que les messages d'erreur sont
 compréhensibles, que les requêtes Network sont bien celles attendues, et que
 l'`ObjectURL` est effectivement révoquée.

@@ -384,43 +384,5 @@ compte de démonstration :
 | `DELETE` sur une piste déjà supprimée | `404 {"message":"Piste inconnue"}` |
 
 > Ces vérifications portent sur le **contrat HTTP**, en ligne de commande. Elles
-> ne remplacent pas les captures Network que le binôme doit produire dans le
-> navigateur : elles ne prouvent rien sur la confirmation, le SnackBar ou le
+> ne remplacent pas les captures Network du navigateur : elles ne prouvent rien sur la confirmation, le SnackBar ou le
 > rechargement de la liste, qui sont du ressort de l'interface.
-
-### À vérifier soi-même
-
-**[À COMPLÉTER PAR LE BINÔME]** — le sujet exige « une requête `DELETE` après
-confirmation » dans l'onglet Network.
-
-1. Ouvrir `/tracks` connecté, DevTools (F12) → onglet **Network**, filtre
-   **XHR/fetch**, vider la liste.
-2. Cliquer « Supprimer » sur une piste, puis **Annuler** dans la boîte de
-   dialogue. Constater qu'**aucune ligne n'apparaît** dans Network. C'est la
-   première moitié de la preuve, et on l'oublie souvent.
-3. Recliquer, puis **Confirmer**. Relever pour la requête `DELETE` : la méthode,
-   l'URL (elle doit contenir l'`id` de la piste), la **présence** de l'en-tête
-   `Authorization` — ne recopiez jamais sa valeur — et le statut `204`.
-   Remarquer que l'onglet *Response* est **vide** : c'est normal, `204` signifie
-   « pas de contenu ».
-4. Constater la requête `GET /api/tracks?page=...` qui **suit immédiatement** :
-   c'est le `load()` de rechargement.
-5. Vérifier le SnackBar en bas de l'écran et la disparition de la card.
-6. *Cas « supprimée ailleurs »* : ouvrir l'application dans **deux onglets** sur
-   la même liste. Supprimer une piste dans l'onglet A. Dans l'onglet B (qui
-   affiche encore la card), cliquer « Supprimer » sur cette même piste. Relever
-   le `404`, le message du SnackBar, et le fait que la liste se resynchronise.
-7. *Preuve que le frontend n'est pas la sécurité* : dans la console de l'onglet,
-   altérer un caractère du token (`localStorage.setItem('gpc_token', ...)`) puis
-   tenter une suppression. Relever le `401` et la redirection vers `/login`.
-8. Vérifier enfin, comme l'exige le sujet, qu'**aucune donnée sensible** n'est
-   journalisée dans la console : les traces ne contiennent que des
-   identifiants de pistes et des titres (`tracks-page.ts:592`, `:618`, `:639`,
-   `:664`), jamais de token ni de mot de passe.
-
-**Ce que chaque membre sait expliquer sans l'assistant** :
-**[À COMPLÉTER PAR LE BINÔME]** — les deux questions probables à l'oral sont
-« pourquoi la suppression passe-t-elle par un service ? » et « comment le
-backend protège-t-il la suppression ? ». Les réponses sont dans
-[`restitution-orale.md`](./restitution-orale.md) ; notez ici, chacun pour soi,
-ce que vous savez redire sans notes.
