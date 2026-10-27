@@ -263,7 +263,9 @@ export class TracksPageComponent {
   private readonly playRequests = new Subject<Track>();
 
   readonly maxFileSizeLabel = this.formatSize(MAX_FILE_SIZE);
-  readonly acceptAttribute = [...ALLOWED_MIME_TYPES, ...ALLOWED_EXTENSIONS].join(',');
+  // Safari grise les fichiers quand `accept` liste des MIME qu'il ne reconnaît pas
+  // (audio/x-wav, audio/x-m4a) : `audio/*` + extensions reste fiable partout.
+  readonly acceptAttribute = ['audio/*', ...ALLOWED_EXTENSIONS].join(',');
 
   constructor() {
     this.playRequests
