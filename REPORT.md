@@ -48,7 +48,7 @@ fichier MP4/WebM (navigateur)
        -> Friendship (invitations, amitiés)
   -> lecture : règle d'accès unique (propriétaire | public | shared + ami accepté), sinon 404
   -> vues : clips-page (Studio) | clip-detail (Salle de montage, share-dialog) | clip-compare
-            discover-page (/clips/discover) | friends-page (/friends, /activity)
+            discover-page (/discover) | friends-page (/friends, avec le fil d'activité)
 ```
 
 Une analyse produit une seule donnée riche qui alimente toutes les vues. Fichiers clés : `backend/src/models/{Clip,Friendship}.js`, `backend/src/app.js`, `frontend-starter/src/app/shared/analysis/*`, `shared/services/{clip-analyzer,clip,friend,activity}.service.ts`, `shared/services/analysis.worker.ts`, `components/*`, `src/styles.css`.
@@ -58,7 +58,7 @@ Une analyse produit une seule donnée riche qui alimente toutes les vues. Fichie
 | Choix | Justification |
 |---|---|
 | Analyse **dans le navigateur** | Pas de ffmpeg serveur ; algorithmes en fonctions pures testables sans vidéo. |
-| **Seuil adaptatif** (écart au niveau normal de la différence entre images, coefficient k réglable de 1 à 6, écart minimal 0,3 s) | Un seuil fixe donne trop de faux positifs selon le film. |
+| **Seuil adaptatif** (écart au niveau normal de la différence entre images, coefficient k réglable de 1 à 6, écart minimal 0,2 s) | Un seuil fixe donne trop de faux positifs selon le film. |
 | **`diffs` stockées** (≤ 1300 valeurs) | Régler la sensibilité sans relire la vidéo ni la renvoyer. |
 | **Worker** pour les beats | L'analyse audio ne fige pas l'interface ; repli sur le thread principal après 30 s ou erreur. |
 | Score normalisé : part des coupes à ±0,08 s d'un beat, divisée par la part attendue au hasard (plafond 10) | ≈ 1 = aucun lien, > 1 = calé sur la musique ; comparable entre extraits. |
@@ -86,7 +86,7 @@ Une analyse produit une seule donnée riche qui alimente toutes les vues. Fichie
 | Suite | Commande | Résultat |
 |---|---|---|
 | Backend | `cd backend && npm test` | 138 réussis, 0 échec (phase 1 : 72) |
-| Frontend | `cd frontend-starter && npx ng test --watch=false` | 505 réussis, 48 fichiers (phase 1 : 283, 25 fichiers) |
+| Frontend | `cd frontend-starter && npx ng test --watch=false` | 512 réussis, 48 fichiers (phase 1 : 283, 25 fichiers) |
 | Build | `npx ng build` | OK, Initial total 1,00 Mo (215,83 kB transférés) ; phase 1 : 810,60 kB |
 | E2E | `cd frontend-starter && npm run e2e` | 20 tests Playwright dans 3 fichiers (`shell` 2, `studio` 10, `detection-quality` 8), 20 réussis au dernier passage de l'agent de test |
 
@@ -96,7 +96,7 @@ Backend : MongoDB simulé en mémoire (`backend/test/fake-mongo.js`), fichiers `
 
 ### Qualité de la détection
 
-La détection a été évaluée sur de **vraies vidéos** (Chrome réel) contre une **vérité terrain** établie à la main en regardant des planches contact (une image toutes les 0,25 s, puis 1/24 s sur les passages ambigus), publiée dans `frontend-starter/e2e/support/ground-truth.ts`. Tolérance : ±0,3 s.
+La détection a été évaluée sur de **vraies vidéos** (Chrome réel) contre une **vérité terrain** établie à la main en regardant des planches contact (une image toutes les 0,1 s, puis 1/24 s sur les passages ambigus), publiée dans `frontend-starter/e2e/support/ground-truth.ts`. Tolérance : ±0,3 s.
 
 | Vidéo | Coupes réelles | Coupes détectées | Rappel | Précision | Fondus détectés |
 |---|---|---|---|---|---|
@@ -135,7 +135,7 @@ Revue de la phase 1 : 5 points importants corrigés (`bd20444`, `e2967e0`).
 
 ## Limites connues
 
-- **MongoDB simulé** dans les tests backend : pas de test d'intégration sur une vraie base (index uniques, opérateurs et agrégations vérifiés par la simulation seulement).
+- **MongoDB simulé** dans la suite principale (`npm test`). Un test d'intégration distinct (`npm run test:integration`, 13 tests) rejoue le parcours clé contre un vrai MongoDB éphémère et passe, sans écart trouvé. Il couvre le parcours principal, pas chaque cas limite.
 - `durationSec` **déclarative** : le serveur ne sonde pas la vidéo.
 - **Vidéos très sombres** : peu de contraste de luminance, la détection y est moins fiable.
 - Précision des coupes limitée par l'échantillonnage à 10 img/s (≈ 0,1 s) ; lecture image par image à 25 i/s fixe (le navigateur n'expose pas la cadence).
@@ -147,6 +147,8 @@ Revue de la phase 1 : 5 points importants corrigés (`bd20444`, `e2967e0`).
 ## Dépendance ajoutée
 
 `@playwright/test` ^1.64.1, **devDependency** du frontend (tests e2e), licence Apache-2.0, maintenue par Microsoft. Utilise Google Chrome installé (`channel: 'chrome'`), car le Chromium de Playwright ne lit pas H.264/AAC. Aucune dépendance de production ajoutée en phase 2.
+
+`mongodb-memory-server` ^11.3.0, **devDependency** du backend (test d'intégration sur vrai MongoDB), licence MIT. Elle télécharge le binaire `mongod` au premier lancement (mis en cache) ; aucune connexion à la base Atlas.
 
 ## Lancer le projet
 

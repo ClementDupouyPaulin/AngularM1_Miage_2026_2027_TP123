@@ -95,4 +95,4 @@ Toutes ces routes exigent un JWT (`401` sinon). Les identifiants invalides donne
 
 Paramètres de requête : Express 5 lit la chaîne de requête sans objets imbriqués ; une clé comme `q[$ne]` est une clé inconnue, ignorée. Un paramètre répété (`q=a&q=b`, `scope=…&scope=…`) donne un tableau, refusé en `400`.
 
-Limite connue : MongoDB est simulé en mémoire dans les tests (`backend/test/fake-mongo.js`) ; il n'y a pas de test d'intégration sur une vraie base (index uniques, opérateurs et agrégations sont vérifiés par la simulation, pas par MongoDB).
+Limite connue : MongoDB est simulé en mémoire dans les tests (`backend/test/fake-mongo.js`) ; un test d'intégration distinct (`npm run test:integration` dans `backend/`) rejoue le parcours principal contre un vrai MongoDB éphémère.
