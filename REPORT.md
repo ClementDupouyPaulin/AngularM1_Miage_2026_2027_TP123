@@ -2,6 +2,8 @@
 
 Film Pulse affiche le **rythme de montage** d'un extrait de film (120 s max) comme un électrocardiogramme : coupes, fondus, longueur moyenne des plans (ASL), battements de la bande-son, tempo, palette de couleurs et score de synchronisation coupes/musique. La phase 2 (« Salle de montage ») ajoute le partage entre amis, la découverte et une refonte complète du design. Plans : [PLAN.md](PLAN.md) (MVP), [PLAN-STUDIO.md](PLAN-STUDIO.md) (phase 2). Contrat HTTP : [API_CONTRACT.md](API_CONTRACT.md). Mode d'emploi : [frontend-starter/docs/film-pulse-guide.md](frontend-starter/docs/film-pulse-guide.md).
 
+> Guide pédagogique (algorithmes, sécurité, tests, questions d'oral) : [frontend-starter/docs/comprendre-film-pulse.md](frontend-starter/docs/comprendre-film-pulse.md). Captures : [frontend-starter/docs/captures/film-pulse/](frontend-starter/docs/captures/film-pulse/).
+
 ## Démo en 7 étapes
 
 1. Se connecter (`demo@example.com` / `Demo1234!`), ouvrir **Studio** (`/clips`).

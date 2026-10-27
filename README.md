@@ -76,6 +76,7 @@ maximum), dans le navigateur :
   (`/discover`).
 
 Parcours pas à pas : [frontend-starter/docs/film-pulse-guide.md](frontend-starter/docs/film-pulse-guide.md).
+Pour **comprendre** le projet (algorithmes expliqués, sécurité, tests, questions d'oral) : [frontend-starter/docs/comprendre-film-pulse.md](frontend-starter/docs/comprendre-film-pulse.md). Captures d'écran : [frontend-starter/docs/captures/film-pulse/](frontend-starter/docs/captures/film-pulse/).
 Le thème sombre ou clair se choisit depuis l'en-tête.
 
 ## Fonctionnalités facultatives
