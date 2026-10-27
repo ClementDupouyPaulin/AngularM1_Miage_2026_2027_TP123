@@ -96,7 +96,26 @@ Backend : MongoDB simulé en mémoire (`backend/test/fake-mongo.js`), fichiers `
 
 ### Qualité de la détection
 
-<!-- DETECTION-RESULTS -->
+La détection a été évaluée sur de **vraies vidéos** (Chrome réel) contre une **vérité terrain** établie à la main en regardant des planches contact (une image toutes les 0,25 s, puis 1/24 s sur les passages ambigus), publiée dans `frontend-starter/e2e/support/ground-truth.ts`. Tolérance : ±0,3 s.
+
+| Vidéo | Coupes réelles | Coupes détectées | Rappel | Précision | Fondus détectés |
+|---|---|---|---|---|---|
+| Bande-annonce Sintel (52 s) | 8 | 7 | 0,88 | 1,00 | 6 |
+| Sintel 10 s (360p et 720p) | 8 | 7 | 0,88 | 1,00 | 1 |
+| Big Buck Bunny 10 s (3 fichiers) | 0 | 0 | 1,00 | 1,00 | 0 |
+| Méduse 10 s (MP4 et WebM) | 0 | 0 | 1,00 | 1,00 | 0 à 1 |
+
+Premier constat, avant réglage : rappel 0,50 et précision 0,44 sur la bande-annonce, et 2 fausses coupes sur la méduse en WebM. Une bande-annonce de ce type ne contient en réalité que 8 coupes franches, le reste étant des fondus : l'intuition « beaucoup plus de coupes » était fausse.
+
+Ce qui a changé : la distance d'histogramme (qui créait les fausses coupes sur les fondus et les artefacts d'encodage) est remplacée par un écart de luminance par blocs de 16×12 avec recalage de ±4 pixels ; le seuil devient local (médiane + k·MAD sur environ 2 s, plancher de 0,04) ; un pic doit dominer ses voisins sur ±0,2 s et une image isolée sur plan fixe est rejetée comme artefact. Coefficient par défaut `k = 4`. La sensibilité reste monotone (bande-annonce, de k = 6 à k = 1 : 7, 7, 7, 7, 7, 9, 10, 10, 13, 15, 18 coupes).
+
+Limites restantes, mesurées :
+- une coupe manquée à 13,9 s (deux plans aux couleurs presque identiques) ;
+- les rafales de coupes espacées de moins de 0,3 s comptent pour une seule (échantillonnage à 10 img/s) ;
+- marge de `k = 4` mince : en dessous de 3,5, des fausses coupes apparaissent sur le mouvement rapide ;
+- les fondus ne se distinguent plus bien du mouvement (environ la moitié des fondus détectés sur la bande-annonce sont du mouvement) ;
+- les anciennes analyses enregistrées gardent leurs `diffs` d'histogramme : les recalculer avec le curseur donne de moins bons résultats ;
+- le réglage repose sur 3 vidéos : risque de surapprentissage, à confirmer sur un corpus plus large.
 
 ### Trouvailles des tests e2e
 
@@ -118,7 +137,7 @@ Revue de la phase 1 : 5 points importants corrigés (`bd20444`, `e2967e0`).
 
 - **MongoDB simulé** dans les tests backend : pas de test d'intégration sur une vraie base (index uniques, opérateurs et agrégations vérifiés par la simulation seulement).
 - `durationSec` **déclarative** : le serveur ne sonde pas la vidéo.
-- **Vidéos très sombres** : peu de contraste d'histogramme, la détection y est moins fiable.
+- **Vidéos très sombres** : peu de contraste de luminance, la détection y est moins fiable.
 - Précision des coupes limitée par l'échantillonnage à 10 img/s (≈ 0,1 s) ; lecture image par image à 25 i/s fixe (le navigateur n'expose pas la cadence).
 - Test `tracks-page` intermittent (préexistant, timeouts ~13 s) : relancer la suite en cas d'échec isolé.
 - Deux backends HTTP possibles côté Angular (`fetch` par défaut, XHR choisi) : tout nouveau besoin de progression doit rester sur `withXhr()`.
