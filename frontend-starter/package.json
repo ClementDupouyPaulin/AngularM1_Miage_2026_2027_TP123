@@ -6,7 +6,8 @@
         "start": "ng serve --proxy-config proxy.conf.json",
         "build": "ng build",
         "test": "ng test --watch=false",
-        "e2e": "playwright test"
+        "e2e": "playwright test",
+        "captures": "CAPTURES=1 playwright test -c e2e/support/captures.config.ts"
     },
     "dependencies": {
         "@angular/cdk": "^22.2.0",
