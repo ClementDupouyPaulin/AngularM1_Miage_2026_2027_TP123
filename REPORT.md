@@ -1,98 +1,133 @@
 # Rapport TP4 — Film Pulse
 
-Film Pulse affiche le **rythme de montage** d'un extrait de film (120 s max) comme un électrocardiogramme : coupes détectées, longueur moyenne des plans (ASL), battements de la bande-son et score de synchronisation coupes/musique. Le plan de cadrage est dans [PLAN.md](PLAN.md), le contrat HTTP dans [API_CONTRACT.md](API_CONTRACT.md) (section « Film Pulse »).
+Film Pulse affiche le **rythme de montage** d'un extrait de film (120 s max) comme un électrocardiogramme : coupes, fondus, longueur moyenne des plans (ASL), battements de la bande-son, tempo, palette de couleurs et score de synchronisation coupes/musique. La phase 2 (« Salle de montage ») ajoute le partage entre amis, la découverte et une refonte complète du design. Plans : [PLAN.md](PLAN.md) (MVP), [PLAN-STUDIO.md](PLAN-STUDIO.md) (phase 2). Contrat HTTP : [API_CONTRACT.md](API_CONTRACT.md). Mode d'emploi : [frontend-starter/docs/film-pulse-guide.md](frontend-starter/docs/film-pulse-guide.md).
 
-## Démo en 5 étapes
+## Démo en 7 étapes
 
-1. Se connecter (`demo@example.com` / `Demo1234!`), ouvrir **Mes extraits** (`/clips`).
-2. Choisir un fichier MP4 ou WebM : l'analyse se lance dans le navigateur, avec barre de progression et annulation.
-3. Consulter l'aperçu (nombre de coupes, ASL, score de synchro) puis envoyer l'extrait.
-4. Ouvrir le détail (`/clips/:id`) : lecteur vidéo, timeline du pouls, clic sur une coupe = saut à cet instant, curseur synchronisé avec la lecture.
-5. Comparer deux extraits sur le même graphique (`/clips/compare`), puis supprimer un extrait.
+1. Se connecter (`demo@example.com` / `Demo1234!`), ouvrir **Studio** (`/clips`).
+2. Déposer un MP4 ou WebM : l'analyse tourne dans le navigateur (aperçu en direct, annulation possible).
+3. Régler la sensibilité sur l'aperçu, ajouter titre et étiquettes, envoyer.
+4. Ouvrir l'extrait (`/clips/:id`) : lecteur, timeline, pellicule, palette ; déplacer le curseur de sensibilité, enregistrer ; annoter un instant.
+5. **Partager** : privé, amis choisis ou public.
+6. Avec un second compte : accepter l'invitation (`/friends`), retrouver l'extrait dans **Découvrir** (`/discover`) et dans le fil d'activité.
+7. Sélectionner deux extraits dans le Studio, **Comparer** (`/clips/compare`) : lecture synchronisée.
 
 ## Fonctionnalités
 
-| Lot | Contenu | État |
-|---|---|---|
-| 0 | Branche `feat/film-pulse`, exception à la règle « backend intouchable » pour `/api/clips` | livré |
-| 1 | Backend : modèle `Clip`, 5 routes `/api/clips`, validation de l'analyse | livré |
-| 2 | Algorithmes purs : `detectCuts`, `detectBeats`, `syncScore`, `averageShotLength` | livré |
-| 3 | `ClipAnalyzerService` : échantillonnage vidéo/canvas, décodage audio, progression, annulation | livré |
-| 4 | `ClipService` HTTP, modèles, route protégée | livré |
-| 5 | Page « Mes extraits » : analyse, envoi, liste paginée, suppression | livré |
-| 6 | Détail : lecteur + timeline SVG du pouls, stats | livré |
-| 7 | Comparaison de deux extraits sur une échelle commune | livré |
-| 8 | Extraits publics/privés, partage, classement | **non fait** (facultatif) |
+| Lot | Contenu | Phase | État |
+|---|---|---|---|
+| 0-1 | Branche `feat/film-pulse`, modèle `Clip`, routes `/api/clips`, validation | 1 | livré |
+| 2 | Algorithmes purs : coupes (seuil adaptatif), beats, score de synchro, ASL | 1 | livré |
+| 3 | `ClipAnalyzerService` : échantillonnage canvas, décodage audio, progression, annulation | 1 | livré |
+| 4-6 | Service HTTP, page « Mes extraits », détail avec timeline SVG | 1 | livré |
+| 7 | Comparaison de deux extraits sur une échelle commune | 1 | livré |
+| 8 | Public/privé, amis, classements (facultatif en phase 1) | 2 | **livré** |
+| Analyse v2 | Fondus (`transitions`), palette dominante, `diffs` conservées pour re-détecter sans relire la vidéo, tempo (BPM), profil de rythme, pellicule JPEG (≤ 41 vignettes), détection des beats dans un **Web Worker** (repli sur le thread principal) | 2 | livré |
+| Studio | Tableau de bord (statistiques, plus nerveux, plus calé), import par glisser-déposer avec aperçu en direct, cartes à affiche et mini-courbe, étiquettes, filtres | 2 | livré |
+| Salle de montage | Lecteur à commandes (J/K/L, image par image), timeline (coupes, fondus, beats, annotations, palette, survol = vignette), sensibilité enregistrable, histogramme des durées, courbe d'accélération, annotations horodatées, export PNG et JSON | 2 | livré |
+| Comparaison | Lecture synchronisée (temps absolu ou durée relative), pouls, palettes, histogrammes et statistiques superposés | 2 | livré |
+| Social | Amis (invitations, retrait), partage `private`/`shared`/`public`, Découvrir (portées et tris), classements, fil d'activité | 2 | livré |
+| Design system | Thème sombre/clair, jetons CSS, coque, pages existantes restylées ([design-system.md](frontend-starter/docs/design-system.md)) | 2 | livré |
 
-Historique : `git log --oneline 3cff3de..HEAD` (10 commits atomiques, un par lot ou correctif).
+Historique : `git log --oneline 3cff3de..HEAD` (commits atomiques, un par lot ou correctif).
 
 ## Architecture
 
 ```
 fichier MP4/WebM (navigateur)
   -> ClipAnalyzerService
-       vidéo : image 64x36 sur <canvas>, 10 img/s par seek -> detectCuts
-       audio : decodeAudioData -> énergie par fenêtre       -> detectBeats
-       -> analysis { version, durationSec, cuts[], beats[], syncScore }
-  -> ClipService : POST /api/clips (multipart : video, title, analysis JSON) + JWT
-  -> Express : valide les octets et l'analyse, recalcule cutCount/ASL/syncScore
-       -> vidéo sur disque (nom UUID)   -> métadonnées + analysis dans MongoDB (Clip)
-  -> GET /api/clips, /api/clips/:id, /api/clips/:id/video (HttpClient -> Blob -> ObjectURL)
-  -> clip-detail (pulse-timeline) / clip-compare
+       vidéo : image 64x36 sur <canvas>, 10 img/s par seek
+               -> diffs + couleur dominante + vignettes 160x90
+               -> detectCuts / detectTransitions / paletteFromColors / pellicule JPEG
+       audio : decodeAudioData -> analysis.worker (detectBeats) -> estimateTempo
+       -> analysis v2 { cuts, beats, diffs, palette, transitions, thumbnailTimes, sensitivity, syncScore }
+  -> redetect(diffs, k) : recalcul local des coupes quand on bouge le curseur (sans relire la vidéo)
+  -> ClipService : POST /api/clips (multipart : video, title, analysis, filmstrip, tags, visibility) + JWT
+  -> Express : valide octets et analyse, recalcule cutCount / ASL / syncScore / sparkline
+       -> vidéo + pellicule sur disque (noms UUID) -> Clip (analysis, annotations, sharedWith) dans MongoDB
+       -> Friendship (invitations, amitiés)
+  -> lecture : règle d'accès unique (propriétaire | public | shared + ami accepté), sinon 404
+  -> vues : clips-page (Studio) | clip-detail (Salle de montage, share-dialog) | clip-compare
+            discover-page (/clips/discover) | friends-page (/friends, /activity)
 ```
 
-Fichiers clés : `backend/src/models/Clip.js`, `backend/src/app.js` (routes `/api/clips`, `computeSyncScore`), `frontend-starter/src/app/shared/analysis/*`, `shared/services/{clip-analyzer,clip}.service.ts`, `components/{clips-page,clip-detail,pulse-timeline,clip-compare}`.
+Une analyse produit une seule donnée riche qui alimente toutes les vues. Fichiers clés : `backend/src/models/{Clip,Friendship}.js`, `backend/src/app.js`, `frontend-starter/src/app/shared/analysis/*`, `shared/services/{clip-analyzer,clip,friend,activity}.service.ts`, `shared/services/analysis.worker.ts`, `components/*`, `src/styles.css`.
 
 ## Choix techniques
 
 | Choix | Justification |
 |---|---|
-| Analyse **dans le navigateur** | Pas de ffmpeg serveur ; les algorithmes sont des fonctions pures testables sans vidéo. |
-| **Seuil adaptatif** (moyenne + 3 écarts-types de la différence d'histogramme, écart minimal 0,3 s) | Un seuil fixe donne trop de faux positifs selon le film. |
-| **Score normalisé** : part des coupes à ±0,08 s d'un beat, divisée par la part attendue au hasard | ≈ 1 = aucun lien, > 1 = calé sur la musique ; comparable entre extraits. Plafonné à 10. |
-| Le **serveur recalcule** `cutCount`, ASL (`durée / (coupes + 1)`) et `syncScore` | Ne jamais faire confiance au client ; le `syncScore` reçu est ignoré. |
+| Analyse **dans le navigateur** | Pas de ffmpeg serveur ; algorithmes en fonctions pures testables sans vidéo. |
+| **Seuil adaptatif** (écart au niveau normal de la différence entre images, coefficient k réglable de 1 à 6, écart minimal 0,3 s) | Un seuil fixe donne trop de faux positifs selon le film. |
+| **`diffs` stockées** (≤ 1300 valeurs) | Régler la sensibilité sans relire la vidéo ni la renvoyer. |
+| **Worker** pour les beats | L'analyse audio ne fige pas l'interface ; repli sur le thread principal après 30 s ou erreur. |
+| Score normalisé : part des coupes à ±0,08 s d'un beat, divisée par la part attendue au hasard (plafond 10) | ≈ 1 = aucun lien, > 1 = calé sur la musique ; comparable entre extraits. |
+| Le **serveur recalcule** `cutCount`, ASL, `syncScore`, `sparkline` | Ne jamais faire confiance au client. |
 | `durationSec` **déclarative** | Pas de ffprobe côté serveur ; la vraie limite imposée est 50 Mo. |
-| Ressource **`/api/clips` séparée** | `/api/tracks` et son contrat TP1–TP3 restent intacts. |
-| Lecture via `HttpClient` + Blob | Le JWT ne peut pas passer par `<video src>` (même principe que l'audio). |
-| Sans audio décodable | Analyse des coupes seule, `syncScore: null`. |
+| Ressource `/api/clips` séparée | `/api/tracks` et le contrat TP1-TP3 restent intacts. |
+| Lecture via `HttpClient` + Blob | Le JWT ne peut pas passer par `<video src>`. |
+| `provideHttpClient(withXhr())` | `fetch` ne remonte pas la progression d'envoi (voir trouvailles e2e). |
+| Aucune bibliothèque de graphiques ni de composants ajoutée | SVG et canvas natifs, polices système ; moins de dépendances à auditer. |
 
 ## Sécurité
 
-- Type vidéo vérifié sur les **octets** (boîte `ftyp` MP4, en-tête EBML WebM), pas sur le `Content-Type` ; refus = fichier supprimé du disque.
-- Isolation par `ownerId` : clip inexistant ou d'autrui = `404 "Clip inconnu"`.
-- Noms de fichiers sur disque en UUID, jamais renvoyés au client.
-- Limites : 50 Mo, 120 s, 2000 valeurs max dans `cuts`/`beats` (triées, dans `[0, durée]`), `q` limité à 100 caractères et traité comme texte littéral, JWT sur toutes les routes.
+| Risque | Parade |
+|---|---|
+| Lecture d'un clip d'autrui (IDOR) | Règle unique : propriétaire, ou `public`, ou `shared` + dans `sharedWith` + amitié acceptée **au moment de la lecture**. Sinon `404 "Clip inconnu"` (jamais `403`). Retirer un ami le retire des `sharedWith` des clips de l'autre. |
+| Énumération des comptes par les invitations | `POST /friends/requests` répond toujours `202` avec le même message ; l'invitation est toujours enregistrée ; une demande sortante n'expose que l'adresse saisie. |
+| Données invalides | `analysis` v2 validée clé par clé (bornes, tri, `#rrggbb`) ; étiquettes, annotations, `sharedWith` (amis acceptés seulement), paramètres de requête (paramètres répétés refusés, clés imbriquées ignorées). |
+| Faux type de fichier | Vidéo vérifiée sur les octets (`ftyp` avec marque MP4 connue, EBML pour WebM ; MOV, HEIC, 3GP refusés) ; pellicule JPEG `FF D8 FF`. Refus = fichiers supprimés du disque. |
+| Dépassement de ressources | Limites multipart (8 champs de 256 ko, 10 parties), taille contrôlée par champ à l'écriture, 50 Mo, 200 annotations par clip (ajout atomique), 50 invitations en attente, JSON de 1 Mo. |
+| Requêtes coûteuses | Agrégations MongoDB bornées (étiquettes : 100 max ; activité : chaque source limitée à `limit` ≤ 50), pages de 20 max. |
+| Fuite d'informations | Noms de fichiers disque jamais renvoyés ; e-mail visible seulement entre les deux parties d'une relation, jamais dans clips, découverte ou activité. |
 
-## Tests (résultats vérifiés)
+## Tests (résultats vérifiés le 27/10/2026)
 
 | Suite | Commande | Résultat |
 |---|---|---|
-| Backend | `cd backend && npm test` | 72 réussis, 0 échec (dont 20 pour `/api/clips`) |
-| Frontend | `cd frontend-starter && npx ng test --watch=false` | 283 réussis, 25 fichiers |
-| dont Film Pulse | idem, specs d'analyse, services et 4 composants | 95 tests, 10 fichiers |
-| Build | `npx ng build` | OK, Initial total 810,60 kB (175,07 kB transférés) |
+| Backend | `cd backend && npm test` | 138 réussis, 0 échec (phase 1 : 72) |
+| Frontend | `cd frontend-starter && npx ng test --watch=false` | 505 réussis, 48 fichiers (phase 1 : 283, 25 fichiers) |
+| Build | `npx ng build` | OK, Initial total 1,00 Mo (215,83 kB transférés) ; phase 1 : 810,60 kB |
+| E2E | `cd frontend-starter && npm run e2e` | 20 tests Playwright dans 3 fichiers (`shell` 2, `studio` 10, `detection-quality` 8), 20 réussis au dernier passage de l'agent de test |
 
-Couvert : algorithmes sur données fabriquées (aucune coupe sur images identiques, coupe nette, fondu léger ignoré, score ≈ 1 au hasard et > 1 si aligné), validation backend (401, 400, 404 sur le clip d'autrui, recalcul serveur, suppression du fichier), service HTTP (`HttpTestingController`), composants avec analyseur simulé, délais et annulation de l'analyse.
+Backend : MongoDB simulé en mémoire (`backend/test/fake-mongo.js`), fichiers `clips`, `clips-v2`, `friends-sharing`, `securite-bonus`. Frontend : algorithmes sur données fabriquées, services (`HttpTestingController`), composants avec analyseur simulé.
 
-**Non testé** : décodage réel de vidéo et d'audio (`<video>`, `<canvas>`, `decodeAudioData` absents ou simulés dans jsdom). La qualité de la détection sur de vrais films n'a pas de test automatisé ni n'a été mesurée.
+**E2E sur vidéos réelles** (Chrome système, API simulée par `e2e/support/api-mock.ts`) : import MP4 et WebM avec contrôle de l'envoi multipart, 5 refus (OGV, MOV, faux fichier, fichier vide, 57 Mo), annulation en cours d'analyse, sensibilité monotone, plan unique (méduse), thème persistant, navigation sans erreur console. Les vidéos ne sont pas dans le dépôt : `FILM_PULSE_SAMPLES=<dossier>` (défaut `~/Downloads/film-pulse-test`) ; sans elles, les tests sont ignorés avec un message.
 
-## Revue indépendante (modèle fable)
+### Qualité de la détection
 
-Résultat : **0 bloquant, 5 points importants, tous corrigés** (commits `bd20444`, `e2967e0`) :
+<!-- DETECTION-RESULTS -->
 
-1. Délais maximaux et annulation de l'analyse (seek 5 s, métadonnées 10 s).
-2. Durée `Infinity` des WebM (MediaRecorder).
-3. Beats au-delà de la durée de la vidéo (filtrés).
-4. `syncScore` recalculé par le serveur.
-5. `404` si le fichier vidéo est absent du disque.
+### Trouvailles des tests e2e
+
+| Constat | Suite |
+|---|---|
+| La barre de progression d'envoi ne bougeait plus : Angular 22 utilise `fetch` par défaut, qui n'émet pas `UploadProgress` | Corrigé : `withXhr()` dans `src/main.ts` (commit `f0792ec`) |
+| Nombre de coupes à régler sur certaines vidéos (bande-annonce sous-détectée, fausses coupes sur un plan unique en WebM) | Voir « Qualité de la détection » |
+
+## Deux revues indépendantes (modèle fable)
+
+| Périmètre | Résultat | Correctifs |
+|---|---|---|
+| Backend (accent sur le contrôle d'accès du partage) | 0 bloquant, aucun accès non autorisé trouvé, 6 points importants corrigés | commit `9fbc8dc` : invitations indiscernables, limites multipart, agrégations bornées, marques MP4 |
+| Frontend | 0 bloquant, 6 points importants corrigés | commit `54d58f1` : annulations au changement d'extrait, resynchronisation, affiches différées, formats unifiés |
+
+Revue de la phase 1 : 5 points importants corrigés (`bd20444`, `e2967e0`).
 
 ## Limites connues
 
+- **MongoDB simulé** dans les tests backend : pas de test d'intégration sur une vraie base (index uniques, opérateurs et agrégations vérifiés par la simulation seulement).
+- `durationSec` **déclarative** : le serveur ne sonde pas la vidéo.
+- **Vidéos très sombres** : peu de contraste d'histogramme, la détection y est moins fiable.
+- Précision des coupes limitée par l'échantillonnage à 10 img/s (≈ 0,1 s) ; lecture image par image à 25 i/s fixe (le navigateur n'expose pas la cadence).
 - Test `tracks-page` intermittent (préexistant, timeouts ~13 s) : relancer la suite en cas d'échec isolé.
-- `GET /api/tracks/:id/audio` renvoie 500 si le fichier est absent (préexistant, non modifié ; `/api/clips/:id/video` renvoie 404).
-- Durée non vérifiée côté serveur (voir choix techniques).
-- Vidéos issues de MediaRecorder : durée absente du conteneur, contournée côté navigateur.
-- Précision des coupes limitée par l'échantillonnage à 10 img/s (≈ 0,1 s).
+- Deux backends HTTP possibles côté Angular (`fetch` par défaut, XHR choisi) : tout nouveau besoin de progression doit rester sur `withXhr()`.
+- Les clips v1 (sans `diffs`) ne permettent pas de régler la sensibilité.
+- Décodage réel de vidéo et d'audio non testé en jsdom : couvert seulement par les tests e2e.
+
+## Dépendance ajoutée
+
+`@playwright/test` ^1.64.1, **devDependency** du frontend (tests e2e), licence Apache-2.0, maintenue par Microsoft. Utilise Google Chrome installé (`channel: 'chrome'`), car le Chromium de Playwright ne lit pas H.264/AAC. Aucune dépendance de production ajoutée en phase 2.
 
 ## Lancer le projet
 
@@ -102,8 +137,16 @@ npm install && npm start             # http://localhost:3000
 cd frontend-starter && npm install && npm start   # http://localhost:4200
 ```
 
-Tests : `cd backend && npm test` ; `cd frontend-starter && npm test` ; build : `npm run build`.
+Tests : `cd backend && npm test` ; `cd frontend-starter && npm test` ; build : `npm run build` ; e2e : `npm run e2e` (Chrome et vidéos de test requis).
 
 ## Usage de l'IA
 
-Un sous-agent par tâche, avec un brief (objectif, fichiers, contraintes, critère de fin) et le modèle le moins cher suffisant : **opus** pour l'implémentation (backend, algorithmes, analyseur, pages), **sonnet** pour le service HTTP et les corrections backend, **fable** pour la revue finale. L'agent principal garde le plan, l'intégration, la vérification des tests et la rédaction de ce rapport ; un commit atomique par lot.
+Un sous-agent par tâche, avec un brief (objectif, fichiers, contraintes, critère de fin) et le modèle le moins cher suffisant :
+
+| Modèle | Tâches |
+|---|---|
+| opus | implémentation (backend, analyse v2, composants, Studio, Salle de montage, social) ; réglage de la détection |
+| sonnet | services HTTP, tests e2e, documentation |
+| fable | revues indépendantes (backend, frontend) |
+
+L'agent principal garde le plan, l'intégration, la vérification des tests et la relecture ; commits atomiques. Chaque vague touche des fichiers disjoints (propriété des fichiers dans PLAN-STUDIO.md). Incident : un agent a lancé `git stash` pendant que d'autres travaillaient ; les modifications ont été restaurées sans perte.

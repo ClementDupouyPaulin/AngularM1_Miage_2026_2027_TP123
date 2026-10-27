@@ -54,6 +54,30 @@ cd frontend-starter && npm run build   # build de production
 Les tests ne contactent ni MongoDB Atlas ni le réseau : les réponses HTTP, les
 modèles Mongoose et le service iTunes y sont simulés.
 
+Tests de bout en bout Film Pulse (Playwright, Google Chrome installé, API
+simulée) : `cd frontend-starter && npm run e2e`. Ils lisent de vraies vidéos
+situées hors du dépôt, dans le dossier indiqué par `FILM_PULSE_SAMPLES`
+(défaut `~/Downloads/film-pulse-test`) ; sans elles, les tests sont ignorés.
+
+## Film Pulse (TP4)
+
+Analyse du rythme de montage d'un extrait vidéo (MP4 ou WebM, 50 Mo et 120 s
+maximum), dans le navigateur :
+
+- **Analyse** : coupes et fondus, durée moyenne des plans, beats et tempo de la
+  bande-son, palette de couleurs, pellicule, score de synchro coupes/musique ;
+  sensibilité réglable sans relire la vidéo.
+- **Studio** (`/clips`) : import avec aperçu en direct, tableau de bord, cartes
+  d'extraits, étiquettes, filtres.
+- **Salle de montage** (`/clips/:id`) : lecteur à raccourcis, timeline, annotations
+  horodatées, partage (privé, amis, public), export PNG et JSON.
+- **Comparaison** (`/clips/compare`) : deux extraits lus en synchronisation.
+- **Social** : amis (`/friends`, fil d'activité), Découvrir et classements
+  (`/discover`).
+
+Parcours pas à pas : [frontend-starter/docs/film-pulse-guide.md](frontend-starter/docs/film-pulse-guide.md).
+Le thème sombre ou clair se choisit depuis l'en-tête.
+
 ## Fonctionnalités facultatives
 
 En plus des missions obligatoires, le dépôt contient les options des sujets :
@@ -74,8 +98,10 @@ progression, tests, restitution orale, bonus). Le statut de chaque
 fonctionnalité facultative est dans
 [frontend-starter/docs/bonus/matrice-facultatives.md](frontend-starter/docs/bonus/matrice-facultatives.md).
 
-Mini-projet TP4 « Film Pulse » : rapport dans [REPORT.md](REPORT.md), plan et
-décisions de cadrage dans [PLAN.md](PLAN.md).
+Mini-projet TP4 « Film Pulse » : rapport dans [REPORT.md](REPORT.md), guide
+d'utilisation dans [frontend-starter/docs/film-pulse-guide.md](frontend-starter/docs/film-pulse-guide.md),
+design dans [frontend-starter/docs/design-system.md](frontend-starter/docs/design-system.md),
+plans dans [PLAN.md](PLAN.md) (MVP) et [PLAN-STUDIO.md](PLAN-STUDIO.md) (phase 2).
 
 ## Documents de travail
 
