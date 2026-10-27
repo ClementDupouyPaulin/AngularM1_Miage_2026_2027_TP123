@@ -1,4 +1,5 @@
 import { statSync } from 'node:fs';
+import { DEFAULT_K } from '../src/app/shared/analysis/cut-detector';
 import { expect, expectValidAnalysis, test } from './support/fixtures';
 import { SAMPLES_MISSING_REASON, rejectedPath, sampleExists, samplePath } from './support/samples';
 
@@ -43,7 +44,7 @@ test.describe('Import et analyse de vraies vidéos', () => {
     expectValidAnalysis(upload.analysis);
     expect(Math.round(upload.analysis.durationSec)).toBeGreaterThanOrEqual(9);
     expect(Math.round(upload.analysis.durationSec)).toBeLessThanOrEqual(11);
-    expect(upload.analysis.sensitivity).toBe(3);
+    expect(upload.analysis.sensitivity).toBe(DEFAULT_K);
     expect(upload.analysis.thumbnailTimes[0]).toBe(0);
     expect(studio.api.unhandled).toEqual([]);
     expect(studio.consoleErrors).toEqual([]);
